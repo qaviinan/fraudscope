@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+:root {
+  --font-display-sans: "Avenir Next", "Montserrat", "Trebuchet MS", sans-serif;
+  --font-code-mono: "SFMono-Regular", "Menlo", "Monaco", "Consolas", monospace;
+  --bg-canvas: #f5f2eb;
+  --bg-panel: #fffdfa;
+  --bg-deep: #0f2c35;
+  --line-soft: #d9d4c9;
+  --text-strong: #11252d;
+  --text-muted: #53636b;
+  --accent-safe: #1c9c7c;
+  --accent-risk: #d1493f;
+  --accent-warn: #f2a93b;
+  --accent-link: #1d5f74;
+  --shadow-lg: 0 20px 60px rgba(17, 37, 45, 0.14);
+}
+
+@theme inline {
+  --font-sans: var(--font-display-sans);
+  --font-mono: var(--font-code-mono);
+}
+
+body {
+  color: var(--text-strong);
+  background:
+    radial-gradient(circle at 15% 20%, #fef9ec 0%, transparent 45%),
+    radial-gradient(circle at 90% 0%, #e0f2ef 0%, transparent 40%),
+    linear-gradient(180deg, #f5f2eb 0%, #eef3f6 100%);
+  font-family: var(--font-display-sans), sans-serif;
+}
+
+.forensic-shell {
+  min-height: 100vh;
+}
+
+.glass-panel {
+  background: color-mix(in srgb, var(--bg-panel) 88%, white);
+  border: 1px solid color-mix(in srgb, var(--line-soft) 70%, white);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(6px);
+}
+
+.metric-tile {
+  border: 1px solid color-mix(in srgb, var(--line-soft) 76%, white);
+  background: linear-gradient(160deg, #fffefb 0%, #f5f8f9 100%);
+}
+
+.mono {
+  font-family: var(--font-code-mono), monospace;
+}

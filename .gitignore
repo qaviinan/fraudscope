@@ -1,0 +1,32 @@
+# OS / editor
+.DS_Store
+.vscode/
+.idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+
+# Large local datasets/artifacts
+data/
+outputs/
+outputs_smoke/
+outputs_api_smoke/
+ieee-fraud-detection.zip
+
+# Local envs / logs
+.env
+.env.*
+*.log
+
+# Node / frontend build outputs
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+

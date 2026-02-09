@@ -1,0 +1,17 @@
+{
+  "datasets": {
+    "main": {
+      "file": "frontend/public/snapshots/main.json",
+      "size_bytes": 18870063,
+      "transaction_count": 1600,
+      "neighborhood_count": 184
+    },
+    "demo": {
+      "file": "frontend/public/snapshots/demo.json",
+      "size_bytes": 831741,
+      "transaction_count": 42,
+      "neighborhood_count": 63
+    }
+  },
+  "generated_at": "2026-02-09T06:20:41.124497+00:00"
+}
