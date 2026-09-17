@@ -16,6 +16,17 @@ Backend for graph-centric fraud analysis and dynamic visualization payloads.
   - embedding-space payloads
   - entity timelines
 
+## Foundational flow review
+
+`docs/foundational_flow_review.md` walks the pipeline stage by stage (real data, synthetic
+generator, cleaning, embeddings, objective, UID blend, evaluation, graph queries, dashboard
+panels) with the math and economic reasoning behind each step and what each step actually
+produces. Every number in it is reproduced by:
+
+```bash
+python scripts/diagnose_foundations.py --n-transactions 120000 --out outputs/diagnostics.json
+```
+
 ## Key modules
 
 - `src/fraud_graphs/synthetic.py`: synthetic IEEE-CIS-like data generator.
