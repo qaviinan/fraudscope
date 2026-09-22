@@ -360,6 +360,8 @@ Static mode reads `main.json` (18.9 MB: 184 precomputed neighbourhoods, 1,600 tr
 
 ## 10. What the foundation needs, and how the three planned upgrades fit
 
+> Status: sections 10.1–10.3 are implemented (generator v2, causal graph features, log-loss + calibration, lift-based stars, cross-account rings). Results are in `generator_v2_verification.md`. Open items are listed there in section 6.
+
 The plan ("bounded rigor pass, not a rebuild") is right about the product surface and wrong about where the pass starts. The API, snapshot exporter, frontend, and graph-store primitives are reusable. The generator, the objective's role, and the two pattern scores must change first, otherwise upgrades 1 and 2 produce true but empty results.
 
 ### 10.1 Generator v2: plant the economics, then measure whether the graph recovers them
