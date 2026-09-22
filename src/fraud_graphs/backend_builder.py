@@ -9,10 +9,13 @@ from typing import Dict, Iterable, List, Tuple
 import numpy as np
 import pandas as pd
 from sklearn.decomposition import PCA
+from sklearn.isotonic import IsotonicRegression
 
 from .features import apply_uid_aggregates, fit_uid_aggregates, uid_label_propagation_blend
 from .graph_embeddings import DEFAULT_RELATION_COLUMNS, SparseGraphEmbedder
+from .graph_features import DEFAULT_ENTITY_COLUMNS, build_causal_graph_features
 from .modeling import evaluate_scores, predict_scores, train_model
+from .synthetic_v2 import DIAGNOSTIC_COLUMNS, SyntheticV2Config, generate_synthetic_v2
 from .synthetic import (
     SyntheticConfig,
     generate_synthetic_ieee_data,
@@ -33,6 +36,15 @@ class BackendBuildConfig:
     valid_ratio: float = 0.15
     graph_embedding_dim: int = 32
     uid_blend_alpha: float = 0.60
+    # v2 options (docs/foundational_flow_review.md section 10)
+    generator: str = "v1"              # "v1": marginal-profile generator; "v2": actor-level generator with planted rings
+    objective: str = "focal"           # "focal" (uncalibrated ranking) or "logistic"
+    causal_graph_features: bool = False
+    calibrate: bool = False            # isotonic calibration on the validation split before scores reach the UI
+    use_svd_embeddings: bool = True
+
+
+V2_GRAPH_RELATION_COLUMNS = list(DEFAULT_ENTITY_COLUMNS)   # identity-like entities only; email domain / OS / browser are attributes
 
 
 def _time_split(
@@ -73,17 +85,22 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
     artifacts_dir = out_dir / "artifacts"
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
-    profiles = load_reference_profiles(
-        train_transaction_path=cfg.real_transaction_path,
-        train_identity_path=cfg.real_identity_path,
-        sample_rows=cfg.sample_rows_for_profile,
-    )
-    synth_cfg = SyntheticConfig(
-        n_transactions=cfg.n_transactions,
-        fraud_rate=profiles.fraud_rate,
-        random_state=cfg.random_state,
-    )
-    tx_df, id_df = generate_synthetic_ieee_data(synth_cfg, profiles)
+    if cfg.generator == "v2":
+        tx_df, id_df = generate_synthetic_v2(SyntheticV2Config(n_transactions=cfg.n_transactions, random_state=cfg.random_state))
+        relation_columns = V2_GRAPH_RELATION_COLUMNS
+    else:
+        profiles = load_reference_profiles(
+            train_transaction_path=cfg.real_transaction_path,
+            train_identity_path=cfg.real_identity_path,
+            sample_rows=cfg.sample_rows_for_profile,
+        )
+        synth_cfg = SyntheticConfig(
+            n_transactions=cfg.n_transactions,
+            fraud_rate=profiles.fraud_rate,
+            random_state=cfg.random_state,
+        )
+        tx_df, id_df = generate_synthetic_ieee_data(synth_cfg, profiles)
+        relation_columns = list(DEFAULT_RELATION_COLUMNS)
     synth_tx_path, synth_id_path = save_synthetic_data(tx_df, id_df, out_dir / "synthetic_data")
 
     full_df = tx_df.merge(id_df, on="TransactionID", how="left")
@@ -105,18 +122,25 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
     )
     full_df = full_df.sort_values("TransactionDT").reset_index(drop=True)
 
+    train_mask = full_df["split"] == "train"
     embedder = SparseGraphEmbedder(
-        relation_columns=DEFAULT_RELATION_COLUMNS,
+        relation_columns=relation_columns,
         embedding_dim=cfg.graph_embedding_dim,
         min_frequency=2,
         random_state=cfg.random_state,
     )
-    train_mask = full_df["split"] == "train"
     embedder.fit(full_df.loc[train_mask])
     all_emb = embedder.transform(full_df)
     full_df = pd.concat([full_df.reset_index(drop=True), all_emb.reset_index(drop=True)], axis=1)
 
-    graph_cols = [c for c in full_df.columns if c.startswith("graph_emb_")]
+    graph_cols = [c for c in full_df.columns if c.startswith("graph_emb_")] if cfg.use_svd_embeddings else []
+    causal_cols: List[str] = []
+    if cfg.causal_graph_features:
+        causal = build_causal_graph_features(
+            full_df, entity_columns=relation_columns, uid_col="uid_clean", label_known_mask=train_mask.to_numpy()
+        )
+        full_df = pd.concat([full_df, causal], axis=1)
+        causal_cols = list(causal.columns)
 
     base_feature_cols = [
         "TransactionDT",
@@ -151,7 +175,8 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
         "uid_c1_mean",
         "uid_seen_in_train",
     ]
-    feature_cols = [c for c in base_feature_cols + graph_cols if c in full_df.columns]
+    feature_cols = [c for c in base_feature_cols + causal_cols + graph_cols if c in full_df.columns]
+    assert not set(feature_cols) & set(DIAGNOSTIC_COLUMNS), "diagnostic columns must never be model features"
 
     categorical_cols = [
         "ProductCD",
@@ -187,9 +212,14 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
         y_valid=y[valid_idx],
         X_test=X[test_idx],
         random_state=cfg.random_state,
+        objective=cfg.objective,
     )
 
     pred_raw_full = predict_scores(model_res.model, model_res.backend, X)
+    if cfg.calibrate:
+        calibrator = IsotonicRegression(out_of_bounds="clip", y_min=0.0, y_max=1.0)
+        calibrator.fit(pred_raw_full[valid_idx], y[valid_idx])
+        pred_raw_full = calibrator.predict(pred_raw_full)
     full_df["pred_raw"] = pred_raw_full
     full_df["pred_uid_blended"] = uid_label_propagation_blend(
         full_df, pred_raw_full, uid_col="uid_clean", blend_alpha=cfg.uid_blend_alpha
@@ -201,8 +231,9 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
     test_raw = full_df.iloc[test_idx]["pred_raw"].to_numpy()
     test_blend = full_df.iloc[test_idx]["pred_uid_blended"].to_numpy()
 
+    svd_cols = [c for c in full_df.columns if c.startswith("graph_emb_")]
     pca = PCA(n_components=2, random_state=cfg.random_state)
-    emb2d = pca.fit_transform(full_df[graph_cols].to_numpy(dtype=np.float32))
+    emb2d = pca.fit_transform(full_df[svd_cols].to_numpy(dtype=np.float32))
     full_df["embed_x"] = emb2d[:, 0]
     full_df["embed_y"] = emb2d[:, 1]
 
@@ -224,7 +255,7 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
     cat_map_path = artifacts_dir / "categorical_mappings.json"
     cat_map_path.write_text(json.dumps(categorical_mappings), encoding="utf-8")
 
-    model_meta = {"backend": model_res.backend}
+    model_meta = {"backend": model_res.backend, "graph_relation_columns": relation_columns, "generator": cfg.generator, "calibrated": bool(cfg.calibrate)}
     if model_res.backend.startswith("xgboost"):
         model_path = artifacts_dir / "model_xgboost.json"
         model_res.model.save_model(str(model_path))
@@ -243,11 +274,13 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
     model_meta_path = artifacts_dir / "model_meta.json"
     model_meta_path.write_text(json.dumps(model_meta, indent=2), encoding="utf-8")
 
+    amt = full_df["TransactionAmt"].to_numpy(dtype=np.float64)
     metrics = {
-        "validation_raw": evaluate_scores(y[valid_idx], valid_raw),
-        "validation_uid_blended": evaluate_scores(y[valid_idx], valid_blend),
-        "test_raw": evaluate_scores(y[test_idx], test_raw),
-        "test_uid_blended": evaluate_scores(y[test_idx], test_blend),
+        "validation_raw": evaluate_scores(y[valid_idx], valid_raw, amt[valid_idx]),
+        "validation_uid_blended": evaluate_scores(y[valid_idx], valid_blend, amt[valid_idx]),
+        "test_raw": evaluate_scores(y[test_idx], test_raw, amt[test_idx]),
+        "test_uid_blended": evaluate_scores(y[test_idx], test_blend, amt[test_idx]),
+        "feature_blocks": {"base": len(base_feature_cols), "causal_graph": len(causal_cols), "svd_embedding": len(graph_cols)},
         "model_backend": model_res.backend,
         "n_transactions": int(cfg.n_transactions),
         "fraud_rate_synthetic": float(tx_df["isFraud"].mean()),

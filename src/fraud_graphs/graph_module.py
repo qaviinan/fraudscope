@@ -271,12 +271,21 @@ class FraudGraphStore:
         return self.subgraph_from_seeds([tx_node_id(transaction_id)], cfg)
 
     def star_patterns(self, top_k: int = 20, min_degree: int = 20) -> List[Dict[str, object]]:
+        """
+        Hubs ranked by *lift over the base rate* with evidence weighting, not by raw degree:
+            score = (risk_mean - base) * sqrt(degree)
+        so a 30-transaction device at 90% risk outranks a 90,000-transaction "missing" bucket at
+        the base rate. Missing-value pseudo-entities are never patterns.
+        """
+        base = float(self.df[self.pred_col].mean())
         rows = []
         for ent_id, stats in self.entity_stats.items():
             degree = int(stats["degree"])
             if degree < min_degree:
                 continue
             _, col, value = parse_node_id(ent_id)
+            if self._is_missing_entity_value(value):
+                continue
             rows.append(
                 {
                     "node_id": ent_id,
@@ -285,7 +294,7 @@ class FraudGraphStore:
                     "degree": degree,
                     "risk_mean": float(stats["risk_mean"]),
                     "risk_max": float(stats["risk_max"]),
-                    "score": float(degree * stats["risk_mean"]),
+                    "score": float((stats["risk_mean"] - base) * np.sqrt(degree)),
                 }
             )
         rows.sort(key=lambda x: x["score"], reverse=True)
@@ -296,11 +305,16 @@ class FraudGraphStore:
         idxs = scored.index.to_numpy(dtype=np.int32)
         idx_set = set(int(i) for i in idxs.tolist())
 
+        # a ring links *different* accounts; two purchases by one account are not a pattern
+        uid_col = "uid_clean" if "uid_clean" in self.df.columns else None
+        uids = self.df[uid_col].astype(str).to_numpy() if uid_col else None
         pair_relations: Dict[Tuple[int, int], Set[str]] = defaultdict(set)
         for col in self.relation_columns:
             groups: Dict[str, List[int]] = defaultdict(list)
             vals = self.df[col].fillna("__MISSING__").astype(str).to_numpy()
             for i in idxs:
+                if self._is_missing_entity_value(vals[i]):
+                    continue
                 groups[vals[i]].append(int(i))
             for members in groups.values():
                 if len(members) < 2:
@@ -308,6 +322,8 @@ class FraudGraphStore:
                 if len(members) > 40:
                     members = members[:40]
                 for a, b in combinations(members, 2):
+                    if uids is not None and uids[a] == uids[b]:
+                        continue
                     key = (a, b) if a < b else (b, a)
                     pair_relations[key].add(col)
 

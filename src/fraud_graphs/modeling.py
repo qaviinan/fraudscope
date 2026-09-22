@@ -67,7 +67,9 @@ def train_model(
     y_valid: np.ndarray,
     X_test: np.ndarray,
     random_state: int = 42,
+    objective: str = "focal",
 ) -> TrainResult:
+    """objective: "focal" (asymmetric focal, ranking only, uncalibrated) or "logistic" (calibrated log-loss)."""
     xgb = _try_import_xgboost()
     if xgb is not None:
         dtrain = xgb.DMatrix(X_train, label=y_train)
@@ -86,6 +88,7 @@ def train_model(
             "eval_metric": "aucpr",
             "seed": random_state,
         }
+        extra = {"obj": asymmetric_focal_objective(gamma_pos=1.0, gamma_neg=4.0)} if objective == "focal" else {}
         bst = xgb.train(
             params=params,
             dtrain=dtrain,
@@ -93,11 +96,12 @@ def train_model(
             evals=[(dtrain, "train"), (dvalid, "valid")],
             early_stopping_rounds=50,
             verbose_eval=False,
-            obj=asymmetric_focal_objective(gamma_pos=1.0, gamma_neg=4.0),
+            **extra,
         )
         valid_pred = bst.predict(dvalid, iteration_range=(0, bst.best_iteration + 1))
         test_pred = bst.predict(dtest, iteration_range=(0, bst.best_iteration + 1))
-        return TrainResult(model=bst, backend="xgboost+asym_focal", valid_pred=valid_pred, test_pred=test_pred)
+        backend = "xgboost+asym_focal" if objective == "focal" else "xgboost+logistic"
+        return TrainResult(model=bst, backend=backend, valid_pred=valid_pred, test_pred=test_pred)
 
     pos_weight = max(1.0, ((len(y_train) - y_train.sum()) / max(1, y_train.sum())))
     sample_weight = np.where(y_train > 0, pos_weight * 1.2, 1.0).astype(np.float64)
@@ -196,14 +200,28 @@ def explain_prediction(
     }
 
 
-def evaluate_scores(y_true: np.ndarray, preds: np.ndarray) -> Dict[str, float]:
+def evaluate_scores(y_true: np.ndarray, preds: np.ndarray, amounts: np.ndarray | None = None) -> Dict[str, float]:
+    """Ranking metrics plus investigation-queue metrics (precision/recall at a review budget k)."""
+    y_true = np.asarray(y_true)
+    preds = np.asarray(preds)
     roc = float(roc_auc_score(y_true, preds))
     pr = float(average_precision_score(y_true, preds))
     precision, recall, _ = precision_recall_curve(y_true, preds)
     mask = precision >= 0.90
     recall_at_90_precision = float(recall[mask].max()) if np.any(mask) else 0.0
-    return {
+    out = {
         "roc_auc": roc,
         "pr_auc": pr,
         "recall_at_90_precision": recall_at_90_precision,
     }
+    order = np.argsort(-preds)
+    n_pos = max(1, int(y_true.sum()))
+    for k in (100, 500, 1000):
+        k_eff = min(k, len(order))
+        top = order[:k_eff]
+        out[f"precision@{k}"] = float(y_true[top].mean())
+        out[f"recall@{k}"] = float(y_true[top].sum() / n_pos)
+        if amounts is not None:
+            amounts = np.asarray(amounts)
+            out[f"fraud_dollars_captured@{k}"] = float((amounts[top] * y_true[top]).sum() / max(1e-9, (amounts * y_true).sum()))
+    return out
