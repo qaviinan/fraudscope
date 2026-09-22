@@ -29,6 +29,11 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--graph-embedding-dim", type=int, default=32)
     p.add_argument("--uid-blend-alpha", type=float, default=0.60)
     p.add_argument("--random-state", type=int, default=42)
+    p.add_argument("--generator", choices=["v1", "v2"], default="v1", help="v2 = actor-level generator with planted rings")
+    p.add_argument("--objective", choices=["focal", "logistic"], default="focal")
+    p.add_argument("--causal-graph-features", action="store_true")
+    p.add_argument("--calibrate", action="store_true")
+    p.add_argument("--no-svd-embeddings", action="store_true")
     return p.parse_args()
 
 
@@ -43,6 +48,11 @@ def main() -> None:
         graph_embedding_dim=args.graph_embedding_dim,
         uid_blend_alpha=args.uid_blend_alpha,
         random_state=args.random_state,
+        generator=args.generator,
+        objective=args.objective,
+        causal_graph_features=args.causal_graph_features,
+        calibrate=args.calibrate,
+        use_svd_embeddings=not args.no_svd_embeddings,
     )
     result = build_backend_artifacts(cfg)
     print(json.dumps(result["metadata"], indent=2))
