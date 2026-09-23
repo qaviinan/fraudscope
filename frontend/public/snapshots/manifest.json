@@ -2,16 +2,16 @@
   "datasets": {
     "main": {
       "file": "frontend/public/snapshots/main.json",
-      "size_bytes": 4300392,
-      "transaction_count": 899,
-      "neighborhood_count": 101
+      "size_bytes": 4999277,
+      "transaction_count": 948,
+      "neighborhood_count": 173
     },
     "demo": {
       "file": "frontend/public/snapshots/demo.json",
-      "size_bytes": 927094,
-      "transaction_count": 50,
-      "neighborhood_count": 71
+      "size_bytes": 429606,
+      "transaction_count": 42,
+      "neighborhood_count": 54
     }
   },
-  "generated_at": "2026-09-22T04:40:21.470227+00:00"
+  "generated_at": "2026-09-23T07:11:22.368370+00:00"
 }
