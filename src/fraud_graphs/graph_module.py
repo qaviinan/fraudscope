@@ -239,15 +239,28 @@ class FraudGraphStore:
         max_nodes: int = 1200,
         max_edges: int = 5000,
     ) -> Dict[str, object]:
+        """
+        Seed the overview from several high-risk transactions that do not share any entity, so the
+        default view shows distinct rings side by side rather than one ring's neighbourhood.
+        """
         max_transactions = max(10, int(max_transactions))
-        tx = self.df[["TransactionID", self.pred_col]].copy()
-        tx = tx.sort_values(self.pred_col, ascending=False)
-        seed_count = 1
-        seeds = [tx_node_id(t) for t in tx.head(seed_count)["TransactionID"].astype(int).tolist()]
+        n_seeds = int(np.clip(max_transactions // 15, 3, 8))
+        order = np.argsort(-self.df[self.pred_col].to_numpy(dtype=np.float32), kind="mergesort")
+        covered: Set[str] = set()
+        seeds: List[str] = []
+        for idx in order[:5000]:
+            ents = [e for e in self._tx_entity_ids(int(idx)) if not self._is_missing_entity_value(parse_node_id(e)[2])]
+            if not ents or any(e in covered for e in ents):
+                continue
+            seeds.append(tx_node_id(int(self.df.iloc[int(idx)]["TransactionID"])))
+            covered.update(ents)
+            if len(seeds) >= n_seeds:
+                break
         cfg = GraphQueryConfig(
             hops=hops,
             max_nodes=max_nodes,
             max_edges=max_edges,
+            max_entity_fanout=max(12, max_transactions // n_seeds),
             max_entity_degree=700,
             include_missing_entities=False,
             min_risk=0.0,
