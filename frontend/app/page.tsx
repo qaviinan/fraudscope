@@ -3,13 +3,16 @@
 import clsx from "clsx";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
-import { ComponentType, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { ComponentType, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+type ForceGraphHandle = { zoomToFit?: (ms?: number, padding?: number) => void };
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -110,9 +113,9 @@ type DatasetName = "main" | "demo";
 
 type SnapshotBundle = {
   dataset: DatasetName;
-  meta: {
-    relation_columns: string[];
-    transaction_count: number;
+  meta?: {
+    relation_columns?: string[];
+    transaction_count?: number;
   };
   overview: GraphResponse;
   patterns: {
@@ -144,6 +147,9 @@ type ForceGraph2DProps = {
   linkDirectionalParticleWidth?: number;
   linkDirectionalParticleSpeed?: () => number;
   onNodeClick?: (node: GraphNode) => void;
+  onNodeHover?: (node: GraphNode | null) => void;
+  onEngineStop?: () => void;
+  ref?: React.Ref<ForceGraphHandle>;
   nodeCanvasObject?: (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => void;
 };
 
@@ -156,7 +162,7 @@ const ForceGraph2D = dynamic(
 const API_BASE = process.env.NEXT_PUBLIC_FRAUD_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DATA_SOURCE = (process.env.NEXT_PUBLIC_DATA_SOURCE ?? "api") as "api" | "static";
 const IS_STATIC = DATA_SOURCE === "static";
-const RELATION_COLORS: Record<string, string> = {
+const DEFAULT_RELATION_COLORS: Record<string, string> = {
   card1: "rgba(167, 74, 62, 0.48)",
   addr1: "rgba(37, 130, 164, 0.45)",
   P_emaildomain: "rgba(35, 138, 107, 0.45)",
@@ -239,8 +245,11 @@ export default function Page() {
   const [searchInput, setSearchInput] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [expandMode, setExpandMode] = useState<"focus" | "merge">("focus");
-  const [dataset, setDataset] = useState<DatasetName>("demo");
+  const [dataset, setDataset] = useState<DatasetName>("main");
+  const [relationColumns, setRelationColumns] = useState<string[]>(Object.keys(DEFAULT_RELATION_COLORS));
+  const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const snapshotRef = useRef<Partial<Record<DatasetName, SnapshotBundle>>>({});
+  const graphRef = useRef<ForceGraphHandle | null>(null);
 
   const ensureSnapshot = useCallback(
     async (ds: DatasetName): Promise<SnapshotBundle | null> => {
@@ -262,11 +271,14 @@ export default function Page() {
         const snap = await ensureSnapshot(dataset);
         if (!snap) throw new Error("Static snapshot not available.");
         setGraph(snap.overview);
+        setRelationColumns(snap.meta?.relation_columns ?? Object.keys(DEFAULT_RELATION_COLORS));
         setStars(snap.patterns.stars.patterns ?? []);
         setRings(snap.patterns.rings.patterns ?? []);
         setEmbeddingPoints(snap.embedding.points ?? []);
         return;
       }
+      const metaData = await fetchApi<{ relation_columns: string[] }>("/api/v1/meta", dataset);
+      setRelationColumns(metaData.relation_columns ?? Object.keys(DEFAULT_RELATION_COLORS));
       const [overview, starData, ringData, embedData] = await Promise.all([
         fetchApi<GraphResponse>("/api/v1/graph/overview?max_transactions=80&hops=2&max_nodes=900&max_edges=3800", dataset),
         fetchApi<{ patterns: PatternItem[] }>("/api/v1/graph/patterns/stars?top_k=10&min_degree=6", dataset),
@@ -463,7 +475,7 @@ export default function Page() {
     () => ({
       nodes: graph.meta?.node_count ?? graph.nodes.length,
       links: graph.meta?.link_count ?? graph.links.length,
-      risky: graph.nodes.filter((n) => (n.risk_score ?? 0) >= 0.65).length,
+      risky: graph.nodes.filter((n) => n.node_type === "transaction" && (n.risk_score ?? 0) >= 0.65).length,
     }),
     [graph],
   );
@@ -561,12 +573,17 @@ export default function Page() {
                 </button>
               </div>
               <div className="flex flex-wrap items-center gap-2 rounded-md border border-[var(--line-soft)] bg-white/90 px-2 py-1">
-                {Object.entries(RELATION_COLORS).map(([key, color]) => (
+                {relationColumns.map((key) => (
                   <span key={key} className="mono flex items-center gap-1 text-[10px] text-[var(--text-muted)]">
-                    <i className="block h-1.5 w-3 rounded" style={{ background: color }} />
+                    <i className="block h-1.5 w-3 rounded" style={{ background: DEFAULT_RELATION_COLORS[key] ?? "rgba(17,37,45,0.35)" }} />
                     {key}
                   </span>
                 ))}
+                <span className="mono flex items-center gap-1 text-[10px] text-[var(--text-muted)]">
+                  <i className="block h-2 w-2 rounded-full" style={{ background: "#d1493f" }} /> ≥75%
+                  <i className="ml-1 block h-2 w-2 rounded-full" style={{ background: "#f2a93b" }} /> 45–75%
+                  <i className="ml-1 block h-2 w-2 rounded-full" style={{ background: "#1c9c7c" }} /> &lt;45%
+                </span>
               </div>
             </div>
             {loadingGraph ? (
@@ -575,6 +592,8 @@ export default function Page() {
               </div>
             ) : (
               <ForceGraph2D
+                ref={graphRef}
+                onEngineStop={() => graphRef.current?.zoomToFit?.(400, 40)}
                 graphData={graph}
                 width={980}
                 height={560}
@@ -582,7 +601,7 @@ export default function Page() {
                 d3VelocityDecay={0.35}
                 d3AlphaDecay={0.06}
                 linkColor={(link: GraphLink) =>
-                  RELATION_COLORS[link.relation] ?? "rgba(17,37,45,0.20)"
+                  DEFAULT_RELATION_COLORS[link.relation] ?? "rgba(17,37,45,0.20)"
                 }
                 linkWidth={1.1}
                 linkCurvature={0.05}
@@ -590,25 +609,41 @@ export default function Page() {
                 linkDirectionalParticleWidth={1.2}
                 linkDirectionalParticleSpeed={() => 0.003}
                 onNodeClick={handleNodeClick}
+                onNodeHover={(node: GraphNode | null) => setHoverNodeId(node?.id ?? null)}
                 nodeCanvasObject={(node: GraphNode, ctx: CanvasRenderingContext2D, scale: number) => {
-                  const label = node.label;
-                  const radius = node.node_type === "transaction" ? 6.5 : 7.8;
+                  const isEntity = node.node_type === "entity";
+                  const focused = selectedNodeId === node.id || hoverNodeId === node.id;
+                  // entity squares scale with how many transactions they connect
+                  const radius = isEntity ? Math.min(14, 6 + Math.log2(1 + (node.degree ?? 1)) * 1.6) : 5.5;
                   ctx.save();
-                  ctx.globalAlpha = selectedNodeId === node.id ? 1 : 0.92;
+                  ctx.globalAlpha = focused ? 1 : 0.92;
                   ctx.beginPath();
-                  if (node.node_type === "transaction") {
+                  if (!isEntity) {
                     ctx.arc(node.x ?? 0, node.y ?? 0, radius, 0, Math.PI * 2, false);
-                    ctx.fillStyle = node.risk_color ?? riskColor(node.risk_score);
+                    ctx.fillStyle = riskColor(node.risk_score);
                     ctx.fill();
+                    if (node.isFraud === 1) {
+                      ctx.lineWidth = 1.2 / scale;
+                      ctx.strokeStyle = "#7a1f18";
+                      ctx.stroke();
+                    }
                   } else {
-                    ctx.fillStyle = selectedNodeId === node.id ? "#0f2c35" : "#1d5f74";
+                    ctx.fillStyle = focused ? "#0f2c35" : "#1d5f74";
                     ctx.fillRect((node.x ?? 0) - radius, (node.y ?? 0) - radius, radius * 2, radius * 2);
                   }
-                  if (selectedNodeId === node.id || scale < 1.2) {
-                    const fontSize = 12 / scale;
+                  // Label restraint: entities are always labelled (short form, they are the story);
+                  // transactions only when hovered or selected.
+                  if (isEntity || focused) {
+                    const fontSize = Math.max(9, 11 / scale);
+                    const text = isEntity
+                      ? `${node.entity_type ?? ""}: ${String(node.label ?? "").split(":").slice(1).join(":").slice(0, 18)} (${node.degree ?? 0})`
+                      : `${node.label} · ${((node.risk_score ?? 0) * 100).toFixed(0)}%`;
                     ctx.font = `${fontSize}px var(--font-code-mono)`;
-                    ctx.fillStyle = "#11252d";
-                    ctx.fillText(label.slice(0, 30), (node.x ?? 0) + radius + 3, (node.y ?? 0) + radius);
+                    const w = ctx.measureText(text).width;
+                    ctx.fillStyle = "rgba(255,255,255,0.85)";
+                    ctx.fillRect((node.x ?? 0) + radius + 2, (node.y ?? 0) - fontSize / 2 - 1, w + 4, fontSize + 2);
+                    ctx.fillStyle = focused ? "#11252d" : "#3b5560";
+                    ctx.fillText(text, (node.x ?? 0) + radius + 4, (node.y ?? 0) + fontSize / 2 - 1);
                   }
                   ctx.restore();
                 }}
@@ -699,16 +734,44 @@ export default function Page() {
                 </div>
               </>
             ) : (
-              <p className="text-sm text-[var(--text-muted)]">
-                Select a transaction node to view model explanation and timeline context.
-              </p>
+              <div className="flex flex-col gap-3 text-sm text-[var(--text-muted)]">
+                <p>
+                  Circles are transactions coloured by calibrated fraud probability; squares are shared
+                  entities (card, address, device) sized by how many transactions they connect. A drop
+                  address or device serving many unrelated accounts is what a ring looks like.
+                </p>
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="metric-tile rounded-xl p-2.5">
+                    <p className="mono text-[10px] uppercase tracking-wider">In view</p>
+                    <p className="mono text-sm text-[var(--text-strong)]">{graph.nodes.filter((n) => n.node_type === "transaction").length} tx</p>
+                  </div>
+                  <div className="metric-tile rounded-xl p-2.5">
+                    <p className="mono text-[10px] uppercase tracking-wider">High risk</p>
+                    <p className="mono text-sm text-[var(--accent-risk)]">{graphStats.risky}</p>
+                  </div>
+                  <div className="metric-tile rounded-xl p-2.5">
+                    <p className="mono text-[10px] uppercase tracking-wider">Entities</p>
+                    <p className="mono text-sm text-[var(--text-strong)]">{graph.nodes.filter((n) => n.node_type === "entity").length}</p>
+                  </div>
+                </div>
+                <p className="mono text-[10px] uppercase tracking-wider">Highest-lift hubs</p>
+                <ul className="space-y-1">
+                  {stars.slice(0, 5).map((item) => (
+                    <li key={`${item.node_id ?? ""}-hint`} className="mono text-xs">
+                      {item.entity_type}: {String(item.entity_value ?? "").slice(0, 22)} · {item.degree} tx · {(100 * (item.risk_mean ?? 0)).toFixed(0)}% risk
+                    </li>
+                  ))}
+                </ul>
+                <p>Click a transaction for its model explanation and account timeline; click an entity to expand its neighbourhood.</p>
+              </div>
             )}
           </motion.aside>
         </section>
 
         <section className="grid gap-4 lg:grid-cols-[1.2fr_1fr_1fr]">
           <article className="glass-panel rounded-2xl p-3">
-            <h3 className="mb-2 text-sm font-semibold">Embedding Space Snapshot</h3>
+            <h3 className="mb-2 text-sm font-semibold">Entity-Reuse Map</h3>
+            <p className="mono mb-1 text-[10px] text-[var(--text-muted)]">x: other accounts on this address (7d, log) · y: other accounts on this device (7d, log)</p>
             <div className="h-56 w-full">
               {mounted ? (
                 <ResponsiveContainer width="100%" height="100%">
@@ -717,7 +780,11 @@ export default function Page() {
                     <XAxis type="number" dataKey="x" tick={{ fontSize: 10 }} />
                     <YAxis type="number" dataKey="y" tick={{ fontSize: 10 }} />
                     <Tooltip cursor={{ strokeDasharray: "3 3" }} />
-                    <Scatter data={embeddingPoints} fill="#1d5f74" />
+                    <Scatter data={embeddingPoints} fill="#1d5f74">
+                      {embeddingPoints.map((pt) => (
+                        <Cell key={pt.TransactionID} fill={riskColor(pt.risk_score)} fillOpacity={pt.risk_score >= 0.45 ? 0.9 : 0.35} />
+                      ))}
+                    </Scatter>
                   </ScatterChart>
                 </ResponsiveContainer>
               ) : null}

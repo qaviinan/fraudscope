@@ -207,7 +207,7 @@ class DemoFraudApiService:
         self.dataset_name = "demo"
         self.df = transactions.reset_index(drop=True).copy()
         self.seed_transaction_ids = seed_transaction_ids
-        self.graph_store = FraudGraphStore(transactions=self.df)
+        self.graph_store = FraudGraphStore(transactions=self.df, relation_columns=["card1", "addr1", "DeviceInfo"])
 
     def graph_overview(
         self,
@@ -278,8 +278,8 @@ class DemoFraudApiService:
             contributions.append(("Low amount baseline", -0.05))
         if "ring_" in str(row.get("P_emaildomain", "")):
             contributions.append(("Part of linked ring attributes", 0.16))
-        if int(row.get("isFraud", 0)) == 0:
-            contributions.append(("Benign cluster context", -0.18))
+        if "Home" in device or "family" in str(row.get("P_emaildomain", "")):
+            contributions.append(("Household device / shared family email", -0.18))
 
         if not contributions:
             contributions = [("Baseline behavior", 0.0)]
@@ -306,6 +306,7 @@ class DemoFraudApiService:
 
         return {
             "backend": "demo_heuristic_explainer",
+            "note": "Scripted demo explanation (not model output); contributions are in probability units.",
             "TransactionID": int(transaction_id),
             "base_probability": float(base_prob),
             "final_probability": float(p),

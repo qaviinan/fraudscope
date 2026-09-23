@@ -175,6 +175,10 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
         "uid_c1_mean",
         "uid_seen_in_train",
     ]
+    if cfg.generator == "v2":
+        # The v1 UID aggregates are computed in-sample on the training window and invert at test time
+        # (docs/generator_v2_verification.md, section 4); the causal graph block replaces them.
+        base_feature_cols = [c for c in base_feature_cols if not c.startswith("uid_")]
     feature_cols = [c for c in base_feature_cols + causal_cols + graph_cols if c in full_df.columns]
     assert not set(feature_cols) & set(DIAGNOSTIC_COLUMNS), "diagnostic columns must never be model features"
 
@@ -231,11 +235,21 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
     test_raw = full_df.iloc[test_idx]["pred_raw"].to_numpy()
     test_blend = full_df.iloc[test_idx]["pred_uid_blended"].to_numpy()
 
-    svd_cols = [c for c in full_df.columns if c.startswith("graph_emb_")]
-    pca = PCA(n_components=2, random_state=cfg.random_state)
-    emb2d = pca.fit_transform(full_df[svd_cols].to_numpy(dtype=np.float32))
-    full_df["embed_x"] = emb2d[:, 0]
-    full_df["embed_y"] = emb2d[:, 1]
+    reuse_x, reuse_y = "g_addr1_other_accounts_168h", "g_DeviceInfo_other_accounts_168h"
+    if reuse_x in full_df.columns and reuse_y in full_df.columns:
+        # Entity-reuse map: how many *other* accounts used this address / device in the last 7 days.
+        # Rings sit top-right, households along the axes, ordinary customers at the origin.
+        jitter = np.random.default_rng(cfg.random_state)
+        full_df["embed_x"] = np.log1p(full_df[reuse_x].to_numpy(dtype=np.float32)) + jitter.normal(0, 0.06, len(full_df))
+        full_df["embed_y"] = np.log1p(full_df[reuse_y].to_numpy(dtype=np.float32)) + jitter.normal(0, 0.06, len(full_df))
+        model_meta_embedding = "entity_reuse_map(log1p other accounts on address 7d, log1p other accounts on device 7d)"
+    else:
+        svd_cols = [c for c in full_df.columns if c.startswith("graph_emb_")]
+        pca = PCA(n_components=2, random_state=cfg.random_state)
+        emb2d = pca.fit_transform(full_df[svd_cols].to_numpy(dtype=np.float32))
+        full_df["embed_x"] = emb2d[:, 0]
+        full_df["embed_y"] = emb2d[:, 1]
+        model_meta_embedding = "pca2(svd one-hot embedding)"
 
     transactions_path = artifacts_dir / "transactions_enriched.csv.gz"
     full_df.to_csv(transactions_path, index=False, compression="gzip")
@@ -255,7 +269,7 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
     cat_map_path = artifacts_dir / "categorical_mappings.json"
     cat_map_path.write_text(json.dumps(categorical_mappings), encoding="utf-8")
 
-    model_meta = {"backend": model_res.backend, "graph_relation_columns": relation_columns, "generator": cfg.generator, "calibrated": bool(cfg.calibrate)}
+    model_meta = {"backend": model_res.backend, "graph_relation_columns": relation_columns, "generator": cfg.generator, "calibrated": bool(cfg.calibrate), "embedding_2d": model_meta_embedding}
     if model_res.backend.startswith("xgboost"):
         model_path = artifacts_dir / "model_xgboost.json"
         model_res.model.save_model(str(model_path))
