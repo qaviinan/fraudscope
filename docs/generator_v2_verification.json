@@ -1,0 +1,1152 @@
+{
+  "config": {
+    "n_transactions": 120000,
+    "horizon_days": 180,
+    "target_fraud_rate": 0.035,
+    "random_state": 42,
+    "tx_per_customer": 12.0,
+    "household_size_p": [
+      0.55,
+      0.25,
+      0.13,
+      0.07
+    ],
+    "household_device_share_p": 0.5,
+    "household_card_share_p": 0.35,
+    "card_reissue_rate": 0.06,
+    "n_rings": 90,
+    "ring_accounts_range": [
+      6,
+      25
+    ],
+    "ring_cards_range": [
+      4,
+      15
+    ],
+    "ring_devices_range": [
+      2,
+      6
+    ],
+    "ring_addresses_range": [
+      1,
+      4
+    ],
+    "ring_reuse_p_range": [
+      0.6,
+      0.9
+    ],
+    "ring_lifetime_days_range": [
+      7,
+      30
+    ],
+    "burst_size_range": [
+      2,
+      12
+    ],
+    "burst_interarrival_minutes": 60.0,
+    "low_and_slow_ring_share": 0.45,
+    "low_and_slow_multiplier": 6.0,
+    "card_burn_uses_range": [
+      5,
+      25
+    ],
+    "card_testing_p": 0.35,
+    "ato_account_rate": 0.015,
+    "unreported_fraud_rate": 0.08,
+    "first_party_fraud_share": 0.2,
+    "identity_missing_extra": 0.0
+  },
+  "structure": {
+    "n_tx": 119976,
+    "fraud_rate": 0.03444855637794225,
+    "actor_mix": {
+      "legit": 115567,
+      "ring": 3201,
+      "first_party": 770,
+      "ato": 438
+    },
+    "accounts_true": 10584,
+    "accounts_proxy": 11319,
+    "identity_table_coverage": 0.2404814296192572,
+    "identity_coverage_by_product": {
+      "C": 0.923,
+      "H": 0.754,
+      "R": 0.625,
+      "S": 0.811,
+      "W": 0.039
+    },
+    "fraud_rate_by_product": {
+      "C": 0.0596,
+      "H": 0.076,
+      "R": 0.0445,
+      "S": 0.0569,
+      "W": 0.0256
+    },
+    "fraud_rate_identity_present_vs_absent": [
+      0.055108831276861225,
+      0.027907027786313154
+    ],
+    "entity_sharing": {
+      "card1": {
+        "n_distinct": 9803,
+        "share_of_values_used_by_gt1_account": 0.09089054371110884,
+        "share_of_tx_on_shared_value": 0.16208241648329666,
+        "fraud_rate_shared_vs_unshared": [
+          0.08598169289313998,
+          0.02448025465035313
+        ],
+        "share_of_shared_tx_that_are_legit(benign_sharing)": 0.9068188830607837,
+        "max_accounts_on_one_value": 6
+      },
+      "addr1": {
+        "n_distinct": 6176,
+        "share_of_values_used_by_gt1_account": 0.4182318652849741,
+        "share_of_tx_on_shared_value": 0.6661415616456625,
+        "fraud_rate_shared_vs_unshared": [
+          0.03602307278437457,
+          0.0313069529397079
+        ],
+        "share_of_shared_tx_that_are_legit(benign_sharing)": 0.9616371166526946,
+        "max_accounts_on_one_value": 17
+      },
+      "DeviceInfo": {
+        "n_distinct": 8570,
+        "share_of_values_used_by_gt1_account": 0.07082847141190199,
+        "share_of_tx_on_shared_value": 0.11406488285040899,
+        "fraud_rate_shared_vs_unshared": [
+          0.2947432391370404,
+          0.024255702046085834
+        ],
+        "share_of_shared_tx_that_are_legit(benign_sharing)": 0.6791248860528715,
+        "max_accounts_on_one_value": 8
+      }
+    },
+    "median_gap_hours_by_actor": {
+      "ato": 0.17,
+      "first_party": 93.49,
+      "legit": 94.67,
+      "ring": 33.95
+    },
+    "share_of_tx_within_1h_of_previous_same_account": {
+      "ato": 0.763,
+      "first_party": 0.026,
+      "legit": 0.018,
+      "ring": 0.027
+    },
+    "median_amount_by_actor": {
+      "ato": 131.0,
+      "first_party": 56.2,
+      "legit": 59.1,
+      "ring": 91.5
+    },
+    "share_micro_amounts_lt_5_by_actor": {
+      "ato": 0.0,
+      "first_party": 0.001,
+      "legit": 0.001,
+      "ring": 0.107
+    },
+    "account_age_D1_median_by_actor": {
+      "ato": 481.0,
+      "first_party": 520.0,
+      "legit": 549.0,
+      "ring": 308.0
+    },
+    "fraud_tx_per_ring_quantiles": [
+      19.0,
+      36.0,
+      53.0
+    ]
+  },
+  "oracle_generator_true_p": {
+    "roc_auc": 0.8805856041006793,
+    "pr_auc": 0.7157226681826202,
+    "recall_at_90_precision": 0.7627118644067796,
+    "precision@100": 0.9,
+    "recall@100": 0.1906779661016949,
+    "fraud_dollars_captured@100": 0.20871719640166794,
+    "precision@500": 0.72,
+    "recall@500": 0.7627118644067796,
+    "fraud_dollars_captured@500": 0.8549330801575343,
+    "precision@1000": 0.367,
+    "recall@1000": 0.777542372881356,
+    "fraud_dollars_captured@1000": 0.8634288348349792
+  },
+  "ablation": {
+    "1_transaction_features": {
+      "n_features": 56,
+      "best_iteration": 373,
+      "test": {
+        "roc_auc": 0.870723844870524,
+        "pr_auc": 0.6716580252186837,
+        "recall_at_90_precision": 0.5127118644067796,
+        "precision@100": 0.95,
+        "recall@100": 0.20127118644067796,
+        "fraud_dollars_captured@100": 0.24486102816335276,
+        "precision@500": 0.658,
+        "recall@500": 0.6970338983050848,
+        "fraud_dollars_captured@500": 0.8068997553458941,
+        "precision@1000": 0.35,
+        "recall@1000": 0.7415254237288136,
+        "fraud_dollars_captured@1000": 0.8399701449977295
+      },
+      "test_uid_blended": {
+        "roc_auc": 0.8847907347856574,
+        "pr_auc": 0.694688633617934,
+        "recall_at_90_precision": 0.5529661016949152,
+        "precision@100": 0.93,
+        "recall@100": 0.19703389830508475,
+        "fraud_dollars_captured@100": 0.23095613369698334,
+        "precision@500": 0.684,
+        "recall@500": 0.7245762711864406,
+        "fraud_dollars_captured@500": 0.8203905776376695,
+        "precision@1000": 0.353,
+        "recall@1000": 0.7478813559322034,
+        "fraud_dollars_captured@1000": 0.8420317058945904
+      },
+      "top_gain_features": [
+        [
+          "C1",
+          44.0
+        ],
+        [
+          "D1",
+          32.6
+        ],
+        [
+          "C3",
+          32.3
+        ],
+        [
+          "D2",
+          23.1
+        ],
+        [
+          "TransactionAmt",
+          14.9
+        ],
+        [
+          "dist1",
+          14.4
+        ],
+        [
+          "ProductCD",
+          14.1
+        ],
+        [
+          "D3",
+          13.4
+        ],
+        [
+          "TransactionDT",
+          13.3
+        ],
+        [
+          "C12",
+          10.7
+        ]
+      ],
+      "calibrated_test_score_range": [
+        0.0,
+        0.008113059215247631,
+        1.0
+      ],
+      "share_calibrated_ge_0.65": 0.015391454131244096,
+      "reliability_(mean_score, fraud_rate, n)": [
+        [
+          0.009,
+          0.008,
+          17468
+        ],
+        [
+          0.153,
+          0.185,
+          124
+        ],
+        [
+          0.239,
+          0.4,
+          35
+        ],
+        [
+          0.393,
+          0.476,
+          21
+        ],
+        [
+          0.431,
+          0.5,
+          66
+        ],
+        [
+          0.502,
+          0.75,
+          4
+        ],
+        [
+          0.646,
+          0.667,
+          3
+        ],
+        [
+          0.796,
+          0.842,
+          120
+        ],
+        [
+          0.874,
+          0.935,
+          155
+        ],
+        [
+          1.0,
+          1.0,
+          1
+        ]
+      ]
+    },
+    "2_plus_uid_aggregates": {
+      "n_features": 63,
+      "best_iteration": 589,
+      "test": {
+        "roc_auc": 0.8543832660364128,
+        "pr_auc": 0.38328061760668103,
+        "recall_at_90_precision": 0.0211864406779661,
+        "precision@100": 0.76,
+        "recall@100": 0.16101694915254236,
+        "fraud_dollars_captured@100": 0.18672479647032597,
+        "precision@500": 0.4,
+        "recall@500": 0.423728813559322,
+        "fraud_dollars_captured@500": 0.4535759088106802,
+        "precision@1000": 0.262,
+        "recall@1000": 0.5550847457627118,
+        "fraud_dollars_captured@1000": 0.596640389845619
+      },
+      "test_uid_blended": {
+        "roc_auc": 0.8758879566720665,
+        "pr_auc": 0.5075981351115564,
+        "recall_at_90_precision": 0.1292372881355932,
+        "precision@100": 0.83,
+        "recall@100": 0.17584745762711865,
+        "fraud_dollars_captured@100": 0.2138360161040865,
+        "precision@500": 0.514,
+        "recall@500": 0.5444915254237288,
+        "fraud_dollars_captured@500": 0.6258446969071793,
+        "precision@1000": 0.307,
+        "recall@1000": 0.6504237288135594,
+        "fraud_dollars_captured@1000": 0.7370352355613069
+      },
+      "top_gain_features": [
+        [
+          "uid_c1_mean",
+          37.6
+        ],
+        [
+          "uid_tx_count",
+          37.2
+        ],
+        [
+          "C3",
+          31.3
+        ],
+        [
+          "D2",
+          21.9
+        ],
+        [
+          "D1",
+          12.8
+        ],
+        [
+          "uid_d1_mean",
+          12.2
+        ],
+        [
+          "ProductCD",
+          10.3
+        ],
+        [
+          "card6",
+          8.1
+        ],
+        [
+          "DeviceInfo",
+          8.1
+        ],
+        [
+          "uid_amt_std",
+          7.7
+        ]
+      ],
+      "calibrated_test_score_range": [
+        0.0,
+        0.009739714674651623,
+        1.0
+      ],
+      "share_calibrated_ge_0.65": 0.004167361226871145,
+      "reliability_(mean_score, fraud_rate, n)": [
+        [
+          0.013,
+          0.014,
+          17228
+        ],
+        [
+          0.16,
+          0.162,
+          425
+        ],
+        [
+          0.247,
+          0.184,
+          38
+        ],
+        [
+          0.334,
+          0.39,
+          154
+        ],
+        [
+          0.468,
+          0.5,
+          64
+        ],
+        [
+          0.666,
+          0.615,
+          26
+        ],
+        [
+          0.73,
+          0.849,
+          53
+        ],
+        [
+          1.0,
+          1.0,
+          9
+        ]
+      ]
+    },
+    "3_plus_vesta_C6-C10_counts": {
+      "n_features": 68,
+      "best_iteration": 581,
+      "test": {
+        "roc_auc": 0.8762923426581881,
+        "pr_auc": 0.6381107029441407,
+        "recall_at_90_precision": 0.5466101694915254,
+        "precision@100": 0.92,
+        "recall@100": 0.19491525423728814,
+        "fraud_dollars_captured@100": 0.2197715618548056,
+        "precision@500": 0.614,
+        "recall@500": 0.6504237288135594,
+        "fraud_dollars_captured@500": 0.745904591964927,
+        "precision@1000": 0.334,
+        "recall@1000": 0.7076271186440678,
+        "fraud_dollars_captured@1000": 0.7956749214320916
+      },
+      "test_uid_blended": {
+        "roc_auc": 0.8834547498730626,
+        "pr_auc": 0.6738837894880036,
+        "recall_at_90_precision": 0.6016949152542372,
+        "precision@100": 0.92,
+        "recall@100": 0.19491525423728814,
+        "fraud_dollars_captured@100": 0.24808595732302083,
+        "precision@500": 0.66,
+        "recall@500": 0.6991525423728814,
+        "fraud_dollars_captured@500": 0.8020652415536874,
+        "precision@1000": 0.347,
+        "recall@1000": 0.7351694915254238,
+        "fraud_dollars_captured@1000": 0.8356756403579532
+      },
+      "top_gain_features": [
+        [
+          "C6",
+          139.2
+        ],
+        [
+          "uid_c1_mean",
+          53.3
+        ],
+        [
+          "C9",
+          37.9
+        ],
+        [
+          "uid_tx_count",
+          31.1
+        ],
+        [
+          "C10",
+          28.9
+        ],
+        [
+          "D2",
+          20.0
+        ],
+        [
+          "D1",
+          12.7
+        ],
+        [
+          "ProductCD",
+          8.5
+        ],
+        [
+          "uid_d1_mean",
+          8.3
+        ],
+        [
+          "C5",
+          7.9
+        ]
+      ],
+      "calibrated_test_score_range": [
+        0.0,
+        0.00902298092842102,
+        0.9402324557304382
+      ],
+      "share_calibrated_ge_0.65": 0.013835639273212201,
+      "reliability_(mean_score, fraud_rate, n)": [
+        [
+          0.01,
+          0.009,
+          17441
+        ],
+        [
+          0.273,
+          0.122,
+          148
+        ],
+        [
+          0.327,
+          0.338,
+          130
+        ],
+        [
+          0.6,
+          0.793,
+          29
+        ],
+        [
+          0.767,
+          1.0,
+          23
+        ],
+        [
+          0.877,
+          0.907,
+          225
+        ],
+        [
+          0.94,
+          1.0,
+          1
+        ]
+      ]
+    },
+    "4_plus_causal_graph": {
+      "n_features": 100,
+      "best_iteration": 141,
+      "test": {
+        "roc_auc": 0.8673616987838197,
+        "pr_auc": 0.6974052952481371,
+        "recall_at_90_precision": 0.6122881355932204,
+        "precision@100": 0.93,
+        "recall@100": 0.19703389830508475,
+        "fraud_dollars_captured@100": 0.23536913870690523,
+        "precision@500": 0.698,
+        "recall@500": 0.739406779661017,
+        "fraud_dollars_captured@500": 0.8330298112322018,
+        "precision@1000": 0.358,
+        "recall@1000": 0.7584745762711864,
+        "fraud_dollars_captured@1000": 0.8431790270509887
+      },
+      "test_uid_blended": {
+        "roc_auc": 0.8772210401605454,
+        "pr_auc": 0.7180214437688408,
+        "recall_at_90_precision": 0.673728813559322,
+        "precision@100": 0.94,
+        "recall@100": 0.19915254237288135,
+        "fraud_dollars_captured@100": 0.22097042796339014,
+        "precision@500": 0.708,
+        "recall@500": 0.75,
+        "fraud_dollars_captured@500": 0.8408018178079375,
+        "precision@1000": 0.359,
+        "recall@1000": 0.760593220338983,
+        "fraud_dollars_captured@1000": 0.8526338293316958
+      },
+      "top_gain_features": [
+        [
+          "g_DeviceInfo_other_accounts_24h",
+          509.8
+        ],
+        [
+          "C6",
+          365.8
+        ],
+        [
+          "g_addr1_other_accounts_24h",
+          161.6
+        ],
+        [
+          "g_2hop_addresses_via_card_devices",
+          147.9
+        ],
+        [
+          "g_addr1_prior_known_fraud_rate",
+          109.4
+        ],
+        [
+          "g_card1_prior_tx_1h",
+          108.3
+        ],
+        [
+          "g_addr1_hours_since_first_seen",
+          98.2
+        ],
+        [
+          "g_addr1_other_accounts_168h",
+          70.3
+        ],
+        [
+          "uid_c1_mean",
+          68.1
+        ],
+        [
+          "D1",
+          53.9
+        ]
+      ],
+      "calibrated_test_score_range": [
+        0.0,
+        0.008695651777088642,
+        1.0
+      ],
+      "share_calibrated_ge_0.65": 0.018614213480024448,
+      "reliability_(mean_score, fraud_rate, n)": [
+        [
+          0.01,
+          0.008,
+          17551
+        ],
+        [
+          0.179,
+          0.214,
+          28
+        ],
+        [
+          0.263,
+          0.417,
+          24
+        ],
+        [
+          0.356,
+          0.469,
+          49
+        ],
+        [
+          0.425,
+          0.0,
+          1
+        ],
+        [
+          0.5,
+          0.556,
+          9
+        ],
+        [
+          0.692,
+          0.611,
+          18
+        ],
+        [
+          0.73,
+          0.75,
+          20
+        ],
+        [
+          0.845,
+          0.864,
+          118
+        ],
+        [
+          0.918,
+          0.939,
+          179
+        ]
+      ]
+    },
+    "4b_plus_svd_embeddings": {
+      "n_features": 132,
+      "best_iteration": 54,
+      "test": {
+        "roc_auc": 0.8627164583282962,
+        "pr_auc": 0.6753448744370079,
+        "recall_at_90_precision": 0.5338983050847458,
+        "precision@100": 0.91,
+        "recall@100": 0.19279661016949154,
+        "fraud_dollars_captured@100": 0.21299595972170526,
+        "precision@500": 0.666,
+        "recall@500": 0.7055084745762712,
+        "fraud_dollars_captured@500": 0.8035493973920035,
+        "precision@1000": 0.356,
+        "recall@1000": 0.7542372881355932,
+        "fraud_dollars_captured@1000": 0.8464329277344237
+      },
+      "test_uid_blended": {
+        "roc_auc": 0.8756497376629029,
+        "pr_auc": 0.6975517045738672,
+        "recall_at_90_precision": 0.6546610169491526,
+        "precision@100": 0.94,
+        "recall@100": 0.19915254237288135,
+        "fraud_dollars_captured@100": 0.23095127366356458,
+        "precision@500": 0.704,
+        "recall@500": 0.7457627118644068,
+        "fraud_dollars_captured@500": 0.8406129725159919,
+        "precision@1000": 0.357,
+        "recall@1000": 0.7563559322033898,
+        "fraud_dollars_captured@1000": 0.8485226860907368
+      },
+      "top_gain_features": [
+        [
+          "g_addr1_other_accounts_168h",
+          351.3
+        ],
+        [
+          "g_2hop_addresses_via_card_devices",
+          316.7
+        ],
+        [
+          "uid_c1_mean",
+          208.6
+        ],
+        [
+          "g_addr1_hours_since_first_seen",
+          204.8
+        ],
+        [
+          "g_addr1_prior_known_fraud_rate",
+          188.3
+        ],
+        [
+          "C6",
+          143.0
+        ],
+        [
+          "g_card1_prior_tx_1h",
+          128.1
+        ],
+        [
+          "uid_tx_count",
+          100.5
+        ],
+        [
+          "D1",
+          85.5
+        ],
+        [
+          "g_addr1_prior_tx_1h",
+          77.7
+        ]
+      ],
+      "calibrated_test_score_range": [
+        0.0,
+        0.009756097570061684,
+        0.9473684430122375
+      ],
+      "share_calibrated_ge_0.65": 0.018780907929099293,
+      "reliability_(mean_score, fraud_rate, n)": [
+        [
+          0.009,
+          0.007,
+          17395
+        ],
+        [
+          0.125,
+          0.2,
+          15
+        ],
+        [
+          0.242,
+          0.101,
+          178
+        ],
+        [
+          0.31,
+          0.412,
+          51
+        ],
+        [
+          0.417,
+          0.5,
+          20
+        ],
+        [
+          0.774,
+          0.73,
+          89
+        ],
+        [
+          0.879,
+          0.93,
+          187
+        ],
+        [
+          0.915,
+          0.855,
+          62
+        ]
+      ]
+    },
+    "5_causal_graph_only": {
+      "n_features": 32,
+      "best_iteration": 132,
+      "test": {
+        "roc_auc": 0.8645545105055732,
+        "pr_auc": 0.640818252961662,
+        "recall_at_90_precision": 0.5233050847457628,
+        "precision@100": 0.96,
+        "recall@100": 0.2033898305084746,
+        "fraud_dollars_captured@100": 0.21292091576522013,
+        "precision@500": 0.594,
+        "recall@500": 0.6292372881355932,
+        "fraud_dollars_captured@500": 0.7497466550578407,
+        "precision@1000": 0.344,
+        "recall@1000": 0.7288135593220338,
+        "fraud_dollars_captured@1000": 0.8242082274834436
+      },
+      "test_uid_blended": {
+        "roc_auc": 0.8834177567155879,
+        "pr_auc": 0.677815126275022,
+        "recall_at_90_precision": 0.597457627118644,
+        "precision@100": 0.96,
+        "recall@100": 0.2033898305084746,
+        "fraud_dollars_captured@100": 0.22928281978188447,
+        "precision@500": 0.642,
+        "recall@500": 0.6800847457627118,
+        "fraud_dollars_captured@500": 0.7926897560722281,
+        "precision@1000": 0.356,
+        "recall@1000": 0.7542372881355932,
+        "fraud_dollars_captured@1000": 0.8511355053722016
+      },
+      "top_gain_features": [
+        [
+          "g_2hop_addresses_via_card_devices",
+          190.4
+        ],
+        [
+          "g_addr1_other_accounts_168h",
+          85.3
+        ],
+        [
+          "g_card1_prior_tx_1h",
+          61.4
+        ],
+        [
+          "g_addr1_prior_tx_1h",
+          40.3
+        ],
+        [
+          "g_addr1_prior_known_fraud_rate",
+          40.2
+        ],
+        [
+          "g_addr1_other_accounts_24h",
+          38.7
+        ],
+        [
+          "g_addr1_hours_since_first_seen",
+          35.1
+        ],
+        [
+          "g_DeviceInfo_other_accounts_168h",
+          28.8
+        ],
+        [
+          "g_2hop_cards_via_device_addresses",
+          12.4
+        ],
+        [
+          "g_card1_hours_since_first_seen",
+          10.3
+        ]
+      ],
+      "calibrated_test_score_range": [
+        0.0,
+        0.007370001636445522,
+        1.0
+      ],
+      "share_calibrated_ge_0.65": 0.01578040784575207,
+      "reliability_(mean_score, fraud_rate, n)": [
+        [
+          0.011,
+          0.01,
+          17603
+        ],
+        [
+          0.14,
+          0.262,
+          61
+        ],
+        [
+          0.25,
+          0.0,
+          4
+        ],
+        [
+          0.351,
+          0.0,
+          2
+        ],
+        [
+          0.595,
+          0.488,
+          43
+        ],
+        [
+          0.688,
+          0.583,
+          12
+        ],
+        [
+          0.759,
+          0.824,
+          51
+        ],
+        [
+          0.812,
+          0.86,
+          57
+        ],
+        [
+          0.947,
+          0.939,
+          164
+        ]
+      ]
+    },
+    "6_svd_only": {
+      "n_features": 32,
+      "best_iteration": 43,
+      "test": {
+        "roc_auc": 0.7265378152276409,
+        "pr_auc": 0.061039555819755,
+        "recall_at_90_precision": 0.0,
+        "precision@100": 0.0,
+        "recall@100": 0.0,
+        "fraud_dollars_captured@100": 0.0,
+        "precision@500": 0.012,
+        "recall@500": 0.012711864406779662,
+        "fraud_dollars_captured@500": 0.01637593759317891,
+        "precision@1000": 0.008,
+        "recall@1000": 0.01694915254237288,
+        "fraud_dollars_captured@1000": 0.017338346649732373
+      },
+      "test_uid_blended": {
+        "roc_auc": 0.7175792451461593,
+        "pr_auc": 0.05163656758731018,
+        "recall_at_90_precision": 0.0,
+        "precision@100": 0.0,
+        "recall@100": 0.0,
+        "fraud_dollars_captured@100": 0.0,
+        "precision@500": 0.008,
+        "recall@500": 0.00847457627118644,
+        "fraud_dollars_captured@500": 0.011101467999013123,
+        "precision@1000": 0.006,
+        "recall@1000": 0.012711864406779662,
+        "fraud_dollars_captured@1000": 0.01637593759317891
+      },
+      "top_gain_features": [
+        [
+          "graph_emb_03",
+          100.4
+        ],
+        [
+          "graph_emb_02",
+          51.5
+        ],
+        [
+          "graph_emb_04",
+          36.3
+        ],
+        [
+          "graph_emb_05",
+          35.6
+        ],
+        [
+          "graph_emb_01",
+          28.7
+        ],
+        [
+          "graph_emb_08",
+          22.0
+        ],
+        [
+          "graph_emb_11",
+          21.9
+        ],
+        [
+          "graph_emb_10",
+          19.6
+        ],
+        [
+          "graph_emb_00",
+          14.8
+        ],
+        [
+          "graph_emb_25",
+          12.0
+        ]
+      ],
+      "calibrated_test_score_range": [
+        0.0,
+        0.013220880180597305,
+        0.3333333432674408
+      ],
+      "share_calibrated_ge_0.65": 0.0,
+      "reliability_(mean_score, fraud_rate, n)": [
+        [
+          0.031,
+          0.026,
+          17896
+        ],
+        [
+          0.142,
+          0.0,
+          65
+        ],
+        [
+          0.205,
+          0.0,
+          34
+        ],
+        [
+          0.321,
+          0.0,
+          2
+        ]
+      ]
+    }
+  },
+  "identity_noise_sweep": {
+    "reissue_0.00": {
+      "proxy_accounts_per_true_account": 1.0398969170564092,
+      "uid_aggregates_pr_auc": 0.46547056142732246,
+      "causal_graph_pr_auc": 0.7434940559938702,
+      "uid_aggregates_p@500": 0.502,
+      "causal_graph_p@500": 0.806
+    },
+    "reissue_0.06": {
+      "proxy_accounts_per_true_account": 1.0694444444444444,
+      "uid_aggregates_pr_auc": 0.38328061760668103,
+      "causal_graph_pr_auc": 0.7118569707963366,
+      "uid_aggregates_p@500": 0.4,
+      "causal_graph_p@500": 0.698
+    },
+    "reissue_0.15": {
+      "proxy_accounts_per_true_account": 1.1260208926875594,
+      "uid_aggregates_pr_auc": 0.42562747799936784,
+      "causal_graph_pr_auc": 0.7172183019347069,
+      "uid_aggregates_p@500": 0.502,
+      "causal_graph_p@500": 0.868
+    },
+    "reissue_0.30": {
+      "proxy_accounts_per_true_account": 1.227354472314245,
+      "uid_aggregates_pr_auc": 0.3646598349454441,
+      "causal_graph_pr_auc": 0.6527677962125412,
+      "uid_aggregates_p@500": 0.358,
+      "causal_graph_p@500": 0.604
+    }
+  },
+  "overview": {
+    "n_tx": 12,
+    "fraud_share": 1.0,
+    "entities": [
+      [
+        "card1:44008",
+        8
+      ],
+      [
+        "addr1:5245",
+        8
+      ]
+    ],
+    "distinct_true_accounts": 5
+  },
+  "stars_top10": [
+    [
+      "addr1",
+      "1244",
+      43,
+      0.907,
+      0.9302325581395349
+    ],
+    [
+      "addr1",
+      "43435",
+      37,
+      0.881,
+      0.9459459459459459
+    ],
+    [
+      "addr1",
+      "57900",
+      34,
+      0.901,
+      0.9117647058823529
+    ],
+    [
+      "addr1",
+      "57679",
+      33,
+      0.899,
+      0.9696969696969697
+    ],
+    [
+      "addr1",
+      "58157",
+      30,
+      0.912,
+      1.0
+    ],
+    [
+      "addr1",
+      "59063",
+      30,
+      0.908,
+      0.9666666666666667
+    ],
+    [
+      "addr1",
+      "37595",
+      32,
+      0.875,
+      0.84375
+    ],
+    [
+      "addr1",
+      "16401",
+      30,
+      0.896,
+      0.9
+    ],
+    [
+      "addr1",
+      "49019",
+      32,
+      0.863,
+      0.96875
+    ],
+    [
+      "addr1",
+      "42426",
+      28,
+      0.911,
+      0.9285714285714286
+    ]
+  ],
+  "rings": {
+    "top200_cross_account_share": 0.985,
+    "top200_both_fraud_share": 0.96
+  },
+  "elapsed_s": 264.4
+}

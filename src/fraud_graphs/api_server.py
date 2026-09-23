@@ -13,7 +13,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from .demo_scenario import build_demo_scenario
-from .graph_module import FraudGraphStore, GraphQueryConfig
+from .graph_module import GRAPH_RELATION_COLUMNS, FraudGraphStore, GraphQueryConfig
 from .modeling import explain_prediction
 
 
@@ -440,7 +440,8 @@ def load_api_artifacts(artifacts_dir: str | Path) -> ApiArtifacts:
         with model_path.open("rb") as f:
             model = pickle.load(f)
 
-    graph_store = FraudGraphStore(transactions=transactions)
+    relation_columns = model_meta.get("graph_relation_columns") or GRAPH_RELATION_COLUMNS
+    graph_store = FraudGraphStore(transactions=transactions, relation_columns=relation_columns)
 
     return ApiArtifacts(
         artifacts_dir=root,
