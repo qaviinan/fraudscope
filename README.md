@@ -16,9 +16,34 @@ Backend for graph-centric fraud analysis and dynamic visualization payloads.
   - embedding-space payloads
   - entity timelines
 
+## Foundational flow review
+
+`docs/foundational_flow_review.md` walks the pipeline stage by stage (real data, synthetic
+generator, cleaning, embeddings, objective, UID blend, evaluation, graph queries, dashboard
+panels) with the math and economic reasoning behind each step and what each step actually
+produces. Every number in it is reproduced by:
+
+```bash
+python scripts/diagnose_foundations.py --n-transactions 120000 --out outputs/diagnostics.json
+```
+
+## Generator v2 (actor-level, planted fraud economics)
+
+`docs/generator_v2_verification.md` describes the v2 generator, the causal graph features and the
+verification results (ceiling PR-AUC 0.72; graph features lift a transaction-only model from 0.67 to 0.70).
+Build v2 artifacts with:
+
+```bash
+python scripts/build_backend_api_artifacts.py --generator v2 --objective logistic \
+  --causal-graph-features --calibrate --n-transactions 120000 --output-dir outputs/backend_api
+python scripts/verify_generator_v2.py --out docs/generator_v2_verification.json
+```
+
 ## Key modules
 
-- `src/fraud_graphs/synthetic.py`: synthetic IEEE-CIS-like data generator.
+- `src/fraud_graphs/synthetic.py`: v1 marginal-profile generator.
+- `src/fraud_graphs/synthetic_v2.py`: v2 actor-level generator (households, rings, ATO, first-party fraud).
+- `src/fraud_graphs/graph_features.py`: causal neighbour aggregates (leak-free graph features).
 - `src/fraud_graphs/features.py`: UID aggregations + UID label blending.
 - `src/fraud_graphs/graph_embeddings.py`: sparse graph embedding features.
 - `src/fraud_graphs/modeling.py`: XGBoost training + asymmetric focal objective + explanation helper.

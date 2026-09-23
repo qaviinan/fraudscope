@@ -66,8 +66,17 @@ def build_dataset_snapshot(
     ).json()
     meta = client.get("/api/v1/meta", params={"dataset": dataset}).json()
 
+    # Seed neighbourhoods from the overview, the star-pattern hubs and the ring-candidate
+    # transactions, so the static snapshot covers several rings rather than one.
     seed_node_ids = [_node_id(n) for n in overview.get("nodes", []) if _node_id(n)]
-    seed_node_ids = seed_node_ids[:max_neighborhood_seeds]
+    for s in stars.get("patterns", []):
+        if s.get("node_id"):
+            seed_node_ids.append(str(s["node_id"]))
+    for r in rings.get("patterns", []):
+        for key in ("tx_a", "tx_b"):
+            if r.get(key) is not None:
+                seed_node_ids.append(f"tx:{int(r[key])}")
+    seed_node_ids = list(dict.fromkeys(seed_node_ids))[:max_neighborhood_seeds]
 
     neighborhoods: Dict[str, object] = {}
     tx_ids: Set[int] = set()
