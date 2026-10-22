@@ -240,8 +240,8 @@ class FraudGraphStore:
         max_edges: int = 5000,
     ) -> Dict[str, object]:
         """
-        Seed the overview from several high-risk transactions that do not share any entity, so the
-        default view shows distinct rings side by side rather than one ring's neighbourhood.
+        Seed the overview from several high-risk transactions that share no entity, so the default
+        view shows separate rings instead of one ring's neighbourhood.
         """
         max_transactions = max(10, int(max_transactions))
         n_seeds = int(np.clip(max_transactions // 15, 3, 8))
@@ -287,10 +287,10 @@ class FraudGraphStore:
 
     def star_patterns(self, top_k: int = 20, min_degree: int = 20) -> List[Dict[str, object]]:
         """
-        Hubs ranked by *lift over the base rate* with evidence weighting, not by raw degree:
+        Rank hubs by lift over the base rate, weighted by evidence:
             score = (risk_mean - base) * sqrt(degree)
-        so a 30-transaction device at 90% risk outranks a 90,000-transaction "missing" bucket at
-        the base rate. Missing-value pseudo-entities are never patterns.
+        A 30-transaction device at 90% risk then outranks a very busy entity at the base rate.
+        Missing values are skipped.
         """
         base = float(self.df[self.pred_col].mean())
         rows = []
@@ -320,7 +320,7 @@ class FraudGraphStore:
         idxs = scored.index.to_numpy(dtype=np.int32)
         idx_set = set(int(i) for i in idxs.tolist())
 
-        # a ring links *different* accounts; two purchases by one account are not a pattern
+        # a ring links different accounts, so pairs from the same account are skipped
         uid_col = "uid_clean" if "uid_clean" in self.df.columns else None
         uids = self.df[uid_col].astype(str).to_numpy() if uid_col else None
         pair_relations: Dict[Tuple[int, int], Set[str]] = defaultdict(set)

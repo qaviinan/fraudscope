@@ -1,21 +1,17 @@
 """
-Generator v2: an actor-level synthetic IEEE-CIS-style dataset with planted fraud economics.
+Generator v2: simulates customers and fraudsters to produce IEEE-CIS-style transactions.
 
-What is planted:
-  * Legitimate customers grouped into households that share an address and often a device.
-  * Fraud rings that own a pool of stolen cards, devices, drop addresses and email domains and
-    run many synthetic accounts drawing from that pool with a reuse probability (asset
-    amortisation), acting in short bursts with card-testing micro-amounts before cash-out,
-    on resellable product lines, with cards that burn after a few uses.
-  * Account takeover: a legitimate account transacting from a ring device.
-  * Identity-table presence that depends on product code (as in the real data).
-  * A hidden true account id (uid_true) and the observable Kaggle-style proxy
-    uid_proxy = card1 + addr1 + (day - D1), degraded by card reissue.
-  * Labels with an unreported fraction (chargeback lag).
+  * Legitimate customers live in households that share an address and often a device.
+  * Fraud rings own a pool of stolen cards, devices, addresses and emails that many ring accounts
+    reuse. They act in bursts, often test a card with small amounts first, and burn cards after
+    a few uses.
+  * Account takeover: a legitimate account used from a ring device.
+  * Whether a transaction has an identity row depends on its product code, as in the real data.
+  * The observable account id is the Kaggle-style proxy card1 + addr1 + (day - D1), which card
+    reissue splits. The true account id is kept as uid_true.
+  * Some fraud is never reported.
 
-The output keeps the v1 column schema (TRANSACTION_COLUMNS / IDENTITY_COLUMNS) so the rest of
-the stack is unchanged, and adds diagnostic columns that must never be used as features:
-uid_true, actor_type, ring_id, true_p.
+The output uses the v1 column schema plus DIAGNOSTIC_COLUMNS, which must never be model features.
 """
 from __future__ import annotations
 
@@ -32,7 +28,7 @@ DIAGNOSTIC_COLUMNS = ["uid_true", "uid_proxy", "actor_type", "ring_id", "true_p"
 PRODUCTS = np.array(["W", "C", "R", "H", "S"], dtype=object)
 LEGIT_PRODUCT_P = np.array([0.745, 0.116, 0.064, 0.056, 0.019])
 RING_PRODUCT_P = np.array([0.50, 0.22, 0.09, 0.15, 0.04])
-# Identity table presence by product (real data: identity rows are mostly C/H/R/S, rarely W).
+# Chance of an identity row by product. In the real data W rarely has one.
 IDENTITY_PRESENCE = {"W": 0.04, "C": 0.92, "R": 0.62, "H": 0.75, "S": 0.80}
 
 DEVICE_MODELS = [
@@ -68,7 +64,7 @@ class SyntheticV2Config:
     tx_per_customer: float = 12.0
     household_size_p: Tuple[float, ...] = (0.55, 0.25, 0.13, 0.07)
     household_device_share_p: float = 0.5
-    household_card_share_p: float = 0.35   # multi-person households that share one card (benign card sharing)
+    household_card_share_p: float = 0.35   # multi-person households that share one card
     card_reissue_rate: float = 0.06        # accounts whose card1 changes mid-horizon (splits uid_proxy)
     # rings
     n_rings: int = 90
@@ -84,11 +80,11 @@ class SyntheticV2Config:
     low_and_slow_multiplier: float = 6.0
     card_burn_uses_range: Tuple[int, int] = (5, 25)
     card_testing_p: float = 0.35           # bursts that open with 1-3 micro-amount probes
-    # account takeover of legitimate accounts
+    # account takeover
     ato_account_rate: float = 0.015
     # labels
     unreported_fraud_rate: float = 0.08
-    first_party_fraud_share: float = 0.20   # share of fraud that is chargeback abuse on ordinary accounts (structurally invisible)
+    first_party_fraud_share: float = 0.20   # share of fraud that is chargeback abuse by ordinary accounts; no feature sees it
     # identity noise
     identity_missing_extra: float = 0.0
 
@@ -164,7 +160,7 @@ def _build_population(cfg: SyntheticV2Config, rng: np.random.Generator):
 
     accounts: List[_Account] = []
     uid = 0
-    # --- households of legitimate customers ---
+    # households of legitimate customers
     households = 0
     while len(accounts) < n_customers:
         size = int(rng.choice(len(cfg.household_size_p), p=np.array(cfg.household_size_p) / sum(cfg.household_size_p))) + 1
@@ -196,7 +192,7 @@ def _build_population(cfg: SyntheticV2Config, rng: np.random.Generator):
         households += 1
     legit_accounts = list(accounts)
 
-    # --- fraud rings ---
+    # fraud rings
     rings: List[Dict[str, object]] = []
     for r in range(cfg.n_rings):
         cards = [new_card() for _ in range(int(rng.integers(*cfg.ring_cards_range)))]
@@ -232,7 +228,7 @@ def _build_population(cfg: SyntheticV2Config, rng: np.random.Generator):
                       "slow": bool(rng.random() < cfg.low_and_slow_ring_share),
                       "card_uses_left": {c: int(rng.integers(*cfg.card_burn_uses_range)) for c in cards}})
 
-    # --- account takeover victims ---
+    # account takeover victims
     n_ato = int(cfg.ato_account_rate * len(legit_accounts))
     for a in rng.choice(len(legit_accounts), size=n_ato, replace=False):
         ring = rings[int(rng.integers(len(rings)))]
@@ -247,7 +243,7 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
     by_uid = {a.uid: a for a in accounts}
     legit = [a for a in accounts if a.actor == "legit"]
 
-    # Fraud volume so that the *reported* fraud rate lands near target.
+    # Scale fraud volume so the reported fraud rate lands near the target.
     n_fraud_target = int(cfg.target_fraud_rate * cfg.n_transactions)
     n_first_party = int(cfg.first_party_fraud_share * n_fraud_target)
     n_actor_fraud = int((n_fraud_target - n_first_party) / (1.0 - cfg.unreported_fraud_rate))
@@ -257,7 +253,7 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
 
     rows: List[Dict[str, object]] = []
 
-    # ---------------- legitimate activity: heterogeneous rates, seasonality, baskets ----------------
+    # Legitimate activity
     rates = rng.lognormal(0.0, 1.1, size=len(legit))          # heavy-tailed customer activity (some people shop a lot)
     counts = rng.multinomial(n_legit_tx, rates / rates.sum())
     for a, n in zip(legit, counts):
@@ -273,7 +269,7 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
                              device=int(rng.choice(a.devices)), product=str(rng.choice(PRODUCTS, p=a.product_p)),
                              amt=float(np.exp(rng.normal(a.amt_mu, a.amt_sigma))), fraud=0, acc=a))
 
-    # ---------------- ring bursts: card testing then cash-out, cards burn ----------------
+    # Ring bursts: optional card testing, then cash-out. Cards burn out after a few uses.
     n_ring_tx = 0
     ring_order = rng.permutation(len(rings))
     guard = 0
@@ -307,7 +303,7 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
                              amt=amt, fraud=1, acc=a))
             n_ring_tx += 1
 
-    # ---------------- account takeover: legitimate card, ring device, short high-value burst ----------------
+    # Account takeover: legitimate card, ring device, short high-value burst
     victims = [a for a in legit if a.ato_day >= 0]
     n_ato_tx = 0
     for a in victims:
@@ -327,7 +323,6 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
     df = df.sort_values("dt", kind="mergesort").reset_index(drop=True)
     n = len(df)
 
-    # account-level attributes (vectorised through uid lookup)
     uid_arr = df["uid_true"].to_numpy()
     def per_uid(attr: str, dtype=object) -> np.ndarray:
         return np.array([getattr(by_uid[int(u)], attr) for u in uid_arr], dtype=dtype)
@@ -336,9 +331,9 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
     birth = per_uid("birth_day", int)
     d1 = np.maximum(1, day - birth).astype(float)
 
-    # ---------------- true label probability and reported label ----------------
-    # Ring / ATO transactions are fraud with probability (1 - unreported). Ordinary transactions carry a
-    # small first-party fraud probability that no feature can see (the Bayes ceiling is below 1).
+    # True fraud probability and reported label. Ring and ATO rows are fraud with probability
+    # 1 - unreported. Ordinary rows carry a small first-party fraud probability that no feature
+    # can see, so even a perfect model stays below 1.
     actor_fraud = df["fraud"].to_numpy() == 1
     n_legit_rows = int((~actor_fraud).sum())
     q_first_party = min(0.5, n_first_party / max(1, n_legit_rows))
@@ -350,7 +345,7 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
     is_fraud = np.where(first_party, 1, is_fraud).astype(np.int8)
     actor_col = np.where(first_party, "first_party", df["actor_type"].to_numpy().astype(object))
 
-    # ---------------- identity table presence ----------------
+    # Identity table presence
     product = df["product"].to_numpy().astype(object)
     presence_p = np.array([IDENTITY_PRESENCE[p] for p in product]) * (1.0 - cfg.identity_missing_extra)
     has_identity = rng.random(n) < presence_p
@@ -361,7 +356,7 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
     id_30 = np.where(has_identity, models[:, 2], None)
     id_31 = np.where(has_identity, models[:, 3], None)
 
-    # ---------------- causal C columns (counts up to and including this row, in time order) ----------------
+    # C columns: counts up to and including this row
     card1 = df["card1"].to_numpy()
     addr1 = df["addr1"].to_numpy()
     p_email = per_uid("p_email")
@@ -415,7 +410,7 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
         "dist2": np.where(rng.random(n) < 0.93, np.nan, np.abs(rng.normal(18, 8, size=n))),
         "P_emaildomain": p_email, "R_emaildomain": np.where(rng.random(n) < 0.77, None, r_email),
         **c_cols, **d_cols, **m_cols,
-        "uid_clean": uid_proxy,      # what v1 called uid_clean is now the observable proxy
+        "uid_clean": uid_proxy,      # observable proxy; the true id is uid_true
         "uid_true": np.array([f"uid_{int(u):06d}" for u in uid_arr], dtype=object),
         "uid_proxy": uid_proxy, "actor_type": actor_col, "ring_id": df["ring_id"].to_numpy(), "true_p": true_p,
     })
@@ -437,7 +432,7 @@ def generate_synthetic_v2(cfg: SyntheticV2Config) -> Tuple[pd.DataFrame, pd.Data
         else:
             id_data[col] = np.where(has_identity, rng.normal(0.0, 1.0, size=n) + 0.05 * risk, np.nan)
     identity_df = pd.DataFrame(id_data)
-    # the identity table only has rows for transactions with identity data (as in the real data)
+    # as in the real data, only transactions with identity data get an identity row
     identity_df = identity_df[has_identity].reset_index(drop=True)
 
     transaction_df = transaction_df[TRANSACTION_COLUMNS + DIAGNOSTIC_COLUMNS]

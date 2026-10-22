@@ -1,16 +1,11 @@
 #!/usr/bin/env python3
 """
-Verify that generator v2 produces coherent data with recoverable graph structure.
+Check the v2 simulator and run the feature ablation.
 
-Checks, in order:
-  1. Population / identity-table / label structure (does the data look like IEEE-CIS, is missingness a mechanism)
-  2. Graph structure: entity sharing across accounts, and whether shared entities carry fraud (rings) or not (households)
-  3. Temporal structure: burstiness of ring activity vs customers
-  4. Bayes ceiling from the generator's own label probabilities
-  5. Nested ablation with a log-loss XGBoost: transaction features -> + UID aggregates -> + causal graph
-     features -> + SVD embeddings, with investigation-queue metrics
-  6. Identity-noise sweep: card reissue rate 0 / 6 / 15 / 30 %, comparing UID-aggregate models with graph-feature models
-  7. What the graph store's overview / star / ring queries return on calibrated scores
+Reports data structure (identity coverage, entity sharing, burstiness), the ceiling from the
+simulator's true probabilities, a nested XGBoost ablation (transaction fields, + account aggregates,
++ C6-C10, + causal graph features, + SVD embeddings), a card-reissue noise sweep (skipped with
+--quick), and what the graph store's overview, star and ring queries return.
 
 Usage: python scripts/verify_generator_v2.py --n-transactions 120000 --out outputs/verify_v2.json
 """
@@ -46,7 +41,7 @@ BASE_FEATURES = [
     "dist1", "dist2", "P_emaildomain", "R_emaildomain", "DeviceType", "DeviceInfo", "id_30", "id_31", "id_33", "id_36", "id_37", "id_38",
     *[f"C{i}" for i in (1, 2, 3, 4, 5, 11, 12, 13, 14)], *[f"D{i}" for i in range(1, 16)], *[f"M{i}" for i in range(1, 10)],
 ]
-VESTA_GRAPH_COUNTS = ["C6", "C7", "C8", "C9", "C10"]   # distinct-entities-per-entity counts (what the real C columns are)
+VESTA_GRAPH_COUNTS = ["C6", "C7", "C8", "C9", "C10"]   # distinct entities per entity, like the real C columns
 UID_FEATURES = ["uid_tx_count", "uid_amt_mean", "uid_amt_std", "uid_amt_median", "uid_d1_mean", "uid_c1_mean", "uid_seen_in_train"]
 CATEGORICAL = ["ProductCD", "card4", "card6", "P_emaildomain", "R_emaildomain", "DeviceType", "DeviceInfo", "id_30", "id_31", "id_33", "id_36", "id_37", "id_38", *[f"M{i}" for i in range(1, 10)]]
 
@@ -91,7 +86,7 @@ def fit_variants(df: pd.DataFrame, causal_cols: List[str], svd_cols: List[str], 
         blend = uid_label_propagation_blend(df, p, blend_alpha=0.6)
         gain = bst.get_score(importance_type="gain")
         top = sorted(((cols[int(k[1:])], round(v, 1)) for k, v in gain.items()), key=lambda kv: -kv[1])[:10]
-        # reliability of calibrated score on test
+        # calibration check on the test split
         bins = np.clip((pc[te] * 10).astype(int), 0, 9)
         reliability = [(round(float(pc[te][bins == b].mean()), 3), round(float(y[te][bins == b].mean()), 3), int((bins == b).sum())) for b in range(10) if (bins == b).sum() > 0]
         out[name] = {
@@ -178,7 +173,7 @@ def main() -> None:
     o = R["oracle_generator_true_p"]
     print(f"{'oracle (true_p)':28s} {'-':>5s} {o['pr_auc']:7.3f} {o['roc_auc']:6.3f} {o['precision@100']:6.2f} {o['precision@500']:6.3f} {o['recall@500']:6.3f} {o['fraud_dollars_captured@500']:6.3f}")
 
-    # ---- identity noise sweep ----
+    # identity noise sweep
     sweep = {}
     for rate in (() if args.quick else (0.0, 0.06, 0.15, 0.30)):
         c2 = SyntheticV2Config(n_transactions=args.n_transactions, random_state=seed, card_reissue_rate=rate)
@@ -190,7 +185,7 @@ def main() -> None:
         print("noise", rate, sweep[f"reissue_{rate:.2f}"], flush=True)
     R["identity_noise_sweep"] = sweep
 
-    # ---- graph store on calibrated scores ----
+    # graph store on calibrated scores
     df["pred_raw"] = preds["4_plus_causal_graph"]; df["pred_score"] = df["pred_raw"]
     df["embed_x"], df["embed_y"] = df[svd_cols[0]], df[svd_cols[1]]
     store = FraudGraphStore(df, relation_columns=V2_GRAPH_RELATION_COLUMNS)

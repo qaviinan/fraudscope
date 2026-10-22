@@ -1,6 +1,6 @@
 # FraudScope
 
-Fraud-ring detection on simulated card transactions: graph features built only from past data, an XGBoost model, and a graph explorer for looking into flagged transactions.
+Fraud-ring detection on simulated card transactions. An XGBoost model uses graph features built only from past data, and a graph explorer shows what flagged transactions connect to.
 
 **Demo:** [fraudscope.vercel.app](https://fraudscope.vercel.app)
 
@@ -22,13 +22,15 @@ PR-AUC on the last 15% of the timeline, mean ± sd over 5 simulator seeds ([per-
 | Features | PR-AUC |
 |---|---|
 | True probabilities (ceiling) | 0.61 ± 0.06 |
-| Transaction fields only | 0.53 ± 0.08 |
-| All features, including graph | 0.58 ± 0.06 |
-| Graph features only | 0.54 ± 0.07 |
+| Transaction fields | 0.53 ± 0.08 |
+| + per-account averages | 0.34 ± 0.07 |
+| + C-count features | 0.52 ± 0.09 |
+| + graph features | 0.58 ± 0.06 |
+| Graph features alone | 0.54 ± 0.07 |
 
-Adding the graph features raises PR-AUC by 0.04 on average over transaction fields alone, within each seed (range +0.01 to +0.07), reaching about 94% of the ceiling. Per-account averages fitted on the training window make things worse (0.34), because they don't carry over to new time periods.
+Rows starting with + add to the row above. Adding the graph features raises PR-AUC by 0.06 on average within each seed (+0.01 to +0.10), to about 94% of the ceiling. Per-account averages fitted on the training window make things worse, because they don't carry over to later periods.
 
-All of this is on simulated data where the simulator plants the patterns the graph features look for. It shows the features work when rings behave this way, not how much they would add on a real portfolio.
+The simulator plants the patterns the graph features look for, so these results only show that the features work when rings behave this way. They don't measure how much the features would add on real transactions.
 
 ## Running it
 

@@ -460,7 +460,7 @@ def create_app(artifacts_dir: str = "outputs/backend_api/artifacts") -> FastAPI:
     app = FastAPI(
         title="FraudScope Backend API",
         version="0.1.0",
-        description="Graph-driven fraud detection backend for dynamic visualization.",
+        description="FraudScope API",
     )
     cors_env = os.getenv("FRAUD_API_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000")
     allow_origins = [x.strip() for x in cors_env.split(",") if x.strip()]

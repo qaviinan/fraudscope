@@ -56,18 +56,13 @@ def _base_row(
 
 
 def build_demo_scenario(random_state: int = 42) -> DemoScenarioBundle:
-    """
-    Build a compact, interpretable graph dataset with explicit motifs:
-    - device farm star
-    - shared-attribute ring
-    - benign household cluster
-    """
+    """Small hand-built graph with a device-farm star, a card/address ring and a benign household."""
     rng = np.random.default_rng(random_state)
     rows: List[Dict[str, object]] = []
     tx_id = 9_000_000
     day = 10
 
-    # 1) Device farm star (mostly fraud)
+    # Device farm: one device, many accounts, mostly fraud
     star_seed_tx = tx_id
     for i in range(20):
         fraud = 1 if i < 16 else 0
@@ -94,7 +89,7 @@ def build_demo_scenario(random_state: int = 42) -> DemoScenarioBundle:
         )
         tx_id += 1
 
-    # 2) Ring motif (attribute hand-off around the cycle)
+    # Ring: cards and addresses linked in a cycle
     ring_seed_tx = tx_id
     ring_pairs: List[Tuple[str, str]] = [
         ("card_ring_a", "addr_ring_f"),
@@ -131,7 +126,7 @@ def build_demo_scenario(random_state: int = 42) -> DemoScenarioBundle:
         )
         tx_id += 1
 
-    # 3) Benign household cluster
+    # Household: shared address and devices, all legitimate
     home_seed_tx = tx_id
     for i in range(14):
         rows.append(
@@ -156,7 +151,7 @@ def build_demo_scenario(random_state: int = 42) -> DemoScenarioBundle:
         )
         tx_id += 1
 
-    # 4) A few isolated baseline transactions
+    # Unconnected background transactions
     for i in range(8):
         rows.append(
             _base_row(

@@ -36,14 +36,14 @@ class BackendBuildConfig:
     valid_ratio: float = 0.15
     graph_embedding_dim: int = 32
     uid_blend_alpha: float = 0.60
-    generator: str = "v2"              # "v1": marginal-profile generator from the Kaggle CSVs; "v2": actor-level generator
+    generator: str = "v2"              # "v1" samples marginals from the Kaggle CSVs; "v2" simulates actors
     objective: str = "logistic"        # "focal" (uncalibrated ranking) or "logistic"
     causal_graph_features: bool = True
     calibrate: bool = True             # isotonic calibration on the validation split before scores reach the UI
     use_svd_embeddings: bool = False
 
 
-V2_GRAPH_RELATION_COLUMNS = list(DEFAULT_ENTITY_COLUMNS)   # identity-like entities only; email domain / OS / browser are attributes
+V2_GRAPH_RELATION_COLUMNS = list(DEFAULT_ENTITY_COLUMNS)   # card, address and device only; email domain, OS and browser are treated as attributes
 
 
 def _time_split(
@@ -175,8 +175,8 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
         "uid_seen_in_train",
     ]
     if cfg.generator == "v2":
-        # The v1 UID aggregates are computed in-sample on the training window and invert at test time;
-        # the causal graph block replaces them.
+        # uid_* aggregates are fitted on the training window and don't carry over to later periods.
+        # The causal graph features replace them.
         base_feature_cols = [c for c in base_feature_cols if not c.startswith("uid_")]
     feature_cols = [c for c in base_feature_cols + causal_cols + graph_cols if c in full_df.columns]
     assert not set(feature_cols) & set(DIAGNOSTIC_COLUMNS), "diagnostic columns must never be model features"
@@ -236,8 +236,8 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
 
     reuse_x, reuse_y = "g_addr1_other_accounts_168h", "g_DeviceInfo_other_accounts_168h"
     if reuse_x in full_df.columns and reuse_y in full_df.columns:
-        # Entity-reuse map: how many *other* accounts used this address / device in the last 7 days.
-        # Rings sit top-right, households along the axes, ordinary customers at the origin.
+        # 2D reuse map: other accounts on this address (x) and device (y) in the last 7 days.
+        # Rings land top-right, households along the axes, ordinary customers near the origin.
         jitter = np.random.default_rng(cfg.random_state)
         full_df["embed_x"] = np.log1p(full_df[reuse_x].to_numpy(dtype=np.float32)) + jitter.normal(0, 0.06, len(full_df))
         full_df["embed_y"] = np.log1p(full_df[reuse_y].to_numpy(dtype=np.float32)) + jitter.normal(0, 0.06, len(full_df))

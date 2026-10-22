@@ -30,11 +30,7 @@ class RelationMapping:
 
 
 class SparseGraphEmbedder:
-    """
-    Builds transaction-entity incidence features and compresses them via SVD.
-    This is a scalable structural baseline that approximates graph-context
-    embeddings when deep GNN libraries are not installed.
-    """
+    """One-hot transaction-entity incidence matrix compressed with truncated SVD."""
 
     def __init__(
         self,

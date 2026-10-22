@@ -1,14 +1,13 @@
 """
-Causal graph neighbour aggregates: the graph features fraud teams actually use.
+Causal graph features.
 
-For every transaction and every identity-like entity it touches (card, address, device), compute,
-using only transactions that happened *before* it:
-  * how many prior transactions the entity has in a trailing window (velocity)
-  * how many *other* accounts have used the entity in a trailing window (reuse across identities)
-  * the entity's prior fraud rate among transactions whose label is already known (train rows only)
-  * a two-hop count: distinct addresses reachable through devices previously seen with the card
-Nothing here reads the current row's label or any future row, so the features are leak-free for a
-time split and can be recomputed identically in production.
+For each transaction and each entity it touches (card, address, device), using only earlier transactions:
+  * prior transactions on the entity in trailing windows (velocity)
+  * other accounts that used the entity in trailing windows
+  * the entity's past fraud rate, from labels that would already be known
+  * two-hop counts, e.g. distinct addresses reachable through devices already seen with the card
+No feature reads the current row's label or any later row, so they are safe for a time split and
+match what production could compute.
 """
 from __future__ import annotations
 
@@ -32,7 +31,7 @@ def _entity_window_features(
     prior_weight: float,
     label_lag_s: float,
 ) -> Dict[str, np.ndarray]:
-    """Per-entity causal features for one entity group, rows already sorted by time."""
+    """Features for the rows of one entity value. Rows must be sorted by time."""
     n = len(times)
     out: Dict[str, np.ndarray] = {}
     cum_known = np.concatenate([[0], np.cumsum(known_mask)])
@@ -41,12 +40,11 @@ def _entity_window_features(
     out["prior_tx_all"] = np.arange(n, dtype=np.float32)
     out["prior_known_fraud_rate"] = ((cum_fraud[usable] + prior_rate * prior_weight) / (cum_known[usable] + prior_weight)).astype(np.float32)
     out["prior_known_fraud_count"] = cum_fraud[usable].astype(np.float32)
-    # first-seen age in hours
     out["hours_since_first_seen"] = ((times - times[0]) / 3600.0).astype(np.float32)
     for w in windows_s:
         start = np.searchsorted(times, times - w, side="left")
         out[f"prior_tx_{int(w // 3600)}h"] = (np.arange(n) - start).astype(np.float32)
-        # distinct *other* accounts in the window before this row
+        # distinct accounts in the window before this row, excluding this row's account
         distinct = np.zeros(n, dtype=np.float32)
         window: deque = deque()
         counts: Dict[object, int] = defaultdict(int)
@@ -75,13 +73,12 @@ def build_causal_graph_features(
     label_lag_days: float = 14.0,
 ) -> pd.DataFrame:
     """
-    Returns a DataFrame aligned to df.index with one block of columns per entity column
-    (prefix `g_<column>_`) plus two-hop features. Rows whose entity value is missing get 0 for
-    counts and the global prior for rates.
+    Return features aligned to df.index: one `g_<column>_*` block per entity column, plus two-hop
+    counts. Rows with a missing entity value get 0 for counts and the global prior for rates.
 
-    label_known_mask marks rows whose label may be used as history (typically the train split).
-    Labels of other rows are never read, and a label only becomes usable label_lag_days after its
-    transaction (chargebacks arrive late), so "prior fraud on this entity" is what production would know.
+    label_known_mask marks rows whose labels may be used as history (usually the train split).
+    Other labels are never read. A label becomes usable only label_lag_days after its transaction,
+    because chargebacks arrive late.
     """
     if label_known_mask is None:
         label_known_mask = np.ones(len(df), dtype=bool)
@@ -117,8 +114,8 @@ def build_causal_graph_features(
         for name, arr in block.items():
             feats[f"g_{col}_{name}"] = arr
 
-    # two-hop, causal: distinct addresses reachable via devices previously seen with this card,
-    # and distinct cards reachable via addresses previously seen with this device.
+    # Two-hop counts from earlier rows only: addresses reachable via devices already seen with
+    # this card, and cards reachable via addresses already seen with this device.
     if {"card1", "addr1", "DeviceInfo"}.issubset(set(entity_columns)):
         card_devices: Dict[str, Set[str]] = defaultdict(set)
         device_addrs: Dict[str, Set[str]] = defaultdict(set)
