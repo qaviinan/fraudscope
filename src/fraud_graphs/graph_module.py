@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections import defaultdict, deque
 from dataclasses import dataclass
 from itertools import combinations
-from typing import Deque, Dict, Iterable, List, Sequence, Set, Tuple
+from typing import Deque, Dict, List, Sequence, Set, Tuple
 
 import numpy as np
 import pandas as pd
@@ -246,6 +246,8 @@ class FraudGraphStore:
         max_transactions = max(10, int(max_transactions))
         n_seeds = int(np.clip(max_transactions // 15, 3, 8))
         order = np.argsort(-self.df[self.pred_col].to_numpy(dtype=np.float32), kind="mergesort")
+        if "split" in self.df.columns:  # seed from held-out rows, not ones the model trained on
+            order = order[(self.df["split"].to_numpy()[order] == "test")]
         covered: Set[str] = set()
         seeds: List[str] = []
         for idx in order[:5000]:

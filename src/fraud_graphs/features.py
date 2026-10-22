@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Dict, Iterable, Tuple
+from typing import Dict, Tuple
 
 import numpy as np
 import pandas as pd
@@ -56,9 +56,15 @@ def uid_label_propagation_blend(
     preds: np.ndarray,
     uid_col: str = UID_DEFAULT_COL,
     blend_alpha: float = 0.6,
+    time_col: str = "TransactionDT",
 ) -> np.ndarray:
+    # mean score over the account's transactions up to and including this one (no future rows)
     alpha = float(np.clip(blend_alpha, 0.0, 1.0))
-    pred_df = pd.DataFrame({uid_col: df[uid_col].astype(str), "pred": preds})
-    uid_mean = pred_df.groupby(uid_col)["pred"].transform("mean").to_numpy()
+    order = np.argsort(df[time_col].to_numpy(), kind="stable")
+    uid = df[uid_col].astype(str).to_numpy()[order]
+    s = pd.Series(np.asarray(preds, dtype=float)[order])
+    running = (s.groupby(uid).cumsum() / (s.groupby(uid).cumcount() + 1)).to_numpy()
+    uid_mean = np.empty_like(running)
+    uid_mean[order] = running
     return (1.0 - alpha) * preds + alpha * uid_mean
 
