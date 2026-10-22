@@ -3,9 +3,30 @@
 import clsx from "clsx";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
-import React, { ComponentType, FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import React, { ComponentType, FormEvent, useCallback, useEffect, useMemo, useImperativeHandle, useRef, useState, useSyncExternalStore } from "react";
 
-type ForceGraphHandle = { zoomToFit?: (ms?: number, padding?: number) => void };
+type SimNode = { x?: number; y?: number; vx?: number; vy?: number };
+type ForceFn = ((alpha: number) => void) & { initialize?: (nodes: SimNode[]) => void };
+type ForceGraphHandle = {
+  zoomToFit?: (ms?: number, padding?: number) => void;
+  d3Force?: (name: string, force?: ForceFn | null) => { distanceMax?: (d: number) => void } | undefined;
+  d3ReheatSimulation?: () => void;
+};
+
+// Pulls every node gently toward the origin so separate rings stay close together.
+function gravity(strength: number): ForceFn {
+  let nodes: SimNode[] = [];
+  const force: ForceFn = (alpha) => {
+    for (const n of nodes) {
+      n.vx = (n.vx ?? 0) - (n.x ?? 0) * strength * alpha;
+      n.vy = (n.vy ?? 0) - (n.y ?? 0) * strength * alpha;
+    }
+  };
+  force.initialize = (ns) => {
+    nodes = ns;
+  };
+  return force;
+}
 import {
   Area,
   AreaChart,
@@ -137,7 +158,6 @@ type ForceGraph2DProps = {
   graphData: GraphResponse;
   width: number;
   height: number;
-  warmupTicks?: number;
   cooldownTicks?: number;
   d3VelocityDecay?: number;
   d3AlphaDecay?: number;
@@ -164,11 +184,24 @@ type OverviewData = {
   points: EmbeddingPoint[];
 };
 
+// next/dynamic does not forward refs, so the graph handle is passed as a plain prop.
 const ForceGraph2D = dynamic(
-  async () =>
-    (await import("react-force-graph-2d")).default as unknown as ComponentType<ForceGraph2DProps>,
+  async () => {
+    const Graph = (await import("react-force-graph-2d")).default as unknown as ComponentType<ForceGraph2DProps>;
+    return function ForceGraphWithRef({ graphRef, ...props }: ForceGraph2DProps & { graphRef: React.Ref<ForceGraphHandle> }) {
+      const inner = useRef<ForceGraphHandle | null>(null);
+      useImperativeHandle(graphRef, () => inner.current as ForceGraphHandle);
+      useEffect(() => {
+        const fg = inner.current;
+        fg?.d3Force?.("charge")?.distanceMax?.(220);
+        fg?.d3Force?.("gravity", gravity(0.03));
+        fg?.d3ReheatSimulation?.();
+      }, [props.graphData]);
+      return <Graph ref={inner} {...props} />;
+    };
+  },
   { ssr: false },
-) as ComponentType<ForceGraph2DProps>;
+) as ComponentType<ForceGraph2DProps & { graphRef: React.Ref<ForceGraphHandle> }>;
 
 const API_BASE = process.env.NEXT_PUBLIC_FRAUD_API_BASE_URL ?? "http://127.0.0.1:8000";
 const DATA_SOURCE = (process.env.NEXT_PUBLIC_DATA_SOURCE ?? "static") as "api" | "static";
@@ -628,13 +661,12 @@ export default function Page() {
               </div>
             ) : (
               <ForceGraph2D
-                ref={graphRef}
-                onEngineStop={() => graphRef.current?.zoomToFit?.(0, 40)}
+                graphRef={graphRef}
+                onEngineStop={() => graphRef.current?.zoomToFit?.(400, 40)}
                 graphData={graph}
                 width={graphWidth}
                 height={560}
-                warmupTicks={150}
-                cooldownTicks={0}
+                cooldownTicks={60}
                 d3VelocityDecay={0.35}
                 d3AlphaDecay={0.06}
                 linkColor={(link: GraphLink) =>
@@ -671,7 +703,7 @@ export default function Page() {
                   // Label restraint: entities are always labelled (short form, they are the story);
                   // transactions only when hovered or selected.
                   if (isEntity || focused) {
-                    const fontSize = Math.max(9, 11 / scale);
+                    const fontSize = 10 / scale;
                     const text = isEntity
                       ? `${node.entity_type ?? ""}: ${String(node.label ?? "").split(":").slice(1).join(":").slice(0, 18)} (${node.degree ?? 0})`
                       : `${node.label} · ${((node.risk_score ?? 0) * 100).toFixed(0)}%`;
