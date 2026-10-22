@@ -36,12 +36,11 @@ class BackendBuildConfig:
     valid_ratio: float = 0.15
     graph_embedding_dim: int = 32
     uid_blend_alpha: float = 0.60
-    # v2 options (docs/foundational_flow_review.md section 10)
-    generator: str = "v1"              # "v1": marginal-profile generator; "v2": actor-level generator with planted rings
-    objective: str = "focal"           # "focal" (uncalibrated ranking) or "logistic"
-    causal_graph_features: bool = False
-    calibrate: bool = False            # isotonic calibration on the validation split before scores reach the UI
-    use_svd_embeddings: bool = True
+    generator: str = "v2"              # "v1": marginal-profile generator from the Kaggle CSVs; "v2": actor-level generator
+    objective: str = "logistic"        # "focal" (uncalibrated ranking) or "logistic"
+    causal_graph_features: bool = True
+    calibrate: bool = True             # isotonic calibration on the validation split before scores reach the UI
+    use_svd_embeddings: bool = False
 
 
 V2_GRAPH_RELATION_COLUMNS = list(DEFAULT_ENTITY_COLUMNS)   # identity-like entities only; email domain / OS / browser are attributes
@@ -176,8 +175,8 @@ def build_backend_artifacts(cfg: BackendBuildConfig) -> Dict[str, object]:
         "uid_seen_in_train",
     ]
     if cfg.generator == "v2":
-        # The v1 UID aggregates are computed in-sample on the training window and invert at test time
-        # (docs/generator_v2_verification.md, section 4); the causal graph block replaces them.
+        # The v1 UID aggregates are computed in-sample on the training window and invert at test time;
+        # the causal graph block replaces them.
         base_feature_cols = [c for c in base_feature_cols if not c.startswith("uid_")]
     feature_cols = [c for c in base_feature_cols + causal_cols + graph_cols if c in full_df.columns]
     assert not set(feature_cols) & set(DIAGNOSTIC_COLUMNS), "diagnostic columns must never be model features"

@@ -121,7 +121,6 @@ def structure_report(df: pd.DataFrame) -> Dict[str, object]:
         d = df[df[col].notna()]
         accounts_per = d.groupby(col)["uid_true"].nunique()
         shared = d[col].map(accounts_per) > 1
-        legit_shared = d[(d["actor_type"] == "legit") & shared]
         ent[col] = {
             "n_distinct": int(accounts_per.size),
             "share_of_values_used_by_gt1_account": float((accounts_per > 1).mean()),
@@ -200,7 +199,6 @@ def main() -> None:
     R["overview"] = {"n_tx": len(txs), "fraud_share": float(np.mean([t["isFraud"] for t in txs])) if txs else None, "entities": [(e["label"], e["degree"]) for e in ents][:10],
                      "distinct_true_accounts": int(df.set_index("TransactionID").loc[[int(t["id"][3:]) for t in txs], "uid_true"].nunique())}
     stars = store.star_patterns(top_k=10, min_degree=4)
-    tid_actor = df.set_index("TransactionID")["actor_type"]
     R["stars_top10"] = [(s["entity_type"], s["entity_value"], s["degree"], round(s["risk_mean"], 3), float(df.iloc[store.entity_to_tx_indices[s["node_id"]]]["isFraud"].mean())) for s in stars]
     rings = store.ring_patterns(top_k=200, max_seed_transactions=2500)
     uid_of = df.set_index("TransactionID")["uid_true"]

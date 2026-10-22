@@ -1,7 +1,7 @@
 """
 Generator v2: an actor-level synthetic IEEE-CIS-style dataset with planted fraud economics.
 
-What is planted (see docs/foundational_flow_review.md, section 10.1):
+What is planted:
   * Legitimate customers grouped into households that share an address and often a device.
   * Fraud rings that own a pool of stolen cards, devices, drop addresses and email domains and
     run many synthetic accounts drawing from that pool with a reuse probability (asset

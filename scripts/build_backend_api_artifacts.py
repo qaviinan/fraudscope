@@ -24,16 +24,16 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--real-transaction-path", default="data/train_transaction.csv")
     p.add_argument("--real-identity-path", default="data/train_identity.csv")
     p.add_argument("--output-dir", default="outputs/backend_api")
-    p.add_argument("--n-transactions", type=int, default=250_000)
+    p.add_argument("--n-transactions", type=int, default=120_000)
     p.add_argument("--sample-rows-for-profile", type=int, default=150_000)
     p.add_argument("--graph-embedding-dim", type=int, default=32)
     p.add_argument("--uid-blend-alpha", type=float, default=0.60)
     p.add_argument("--random-state", type=int, default=42)
-    p.add_argument("--generator", choices=["v1", "v2"], default="v1", help="v2 = actor-level generator with planted rings")
-    p.add_argument("--objective", choices=["focal", "logistic"], default="focal")
-    p.add_argument("--causal-graph-features", action="store_true")
-    p.add_argument("--calibrate", action="store_true")
-    p.add_argument("--no-svd-embeddings", action="store_true")
+    p.add_argument("--generator", choices=["v1", "v2"], default="v2")
+    p.add_argument("--objective", choices=["focal", "logistic"], default="logistic")
+    p.add_argument("--causal-graph-features", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--calibrate", action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument("--svd-embeddings", action=argparse.BooleanOptionalAction, default=False)
     return p.parse_args()
 
 
@@ -52,7 +52,7 @@ def main() -> None:
         objective=args.objective,
         causal_graph_features=args.causal_graph_features,
         calibrate=args.calibrate,
-        use_svd_embeddings=not args.no_svd_embeddings,
+        use_svd_embeddings=args.svd_embeddings,
     )
     result = build_backend_artifacts(cfg)
     print(json.dumps(result["metadata"], indent=2))
