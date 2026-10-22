@@ -160,7 +160,7 @@ const ForceGraph2D = dynamic(
 ) as ComponentType<ForceGraph2DProps>;
 
 const API_BASE = process.env.NEXT_PUBLIC_FRAUD_API_BASE_URL ?? "http://127.0.0.1:8000";
-const DATA_SOURCE = (process.env.NEXT_PUBLIC_DATA_SOURCE ?? "api") as "api" | "static";
+const DATA_SOURCE = (process.env.NEXT_PUBLIC_DATA_SOURCE ?? "static") as "api" | "static";
 const IS_STATIC = DATA_SOURCE === "static";
 const DEFAULT_RELATION_COLORS: Record<string, string> = {
   card1: "rgba(167, 74, 62, 0.48)",
@@ -493,6 +493,7 @@ export default function Page() {
             <div>
               <p className="mono text-xs tracking-[0.18em] text-[var(--accent-link)]">FRAUDSCOPE // INVESTIGATION GRID</p>
               <h1 className="mt-1 text-2xl font-semibold md:text-3xl">Graph-Centric Fraud Ring Explorer</h1>
+              <p className="mt-1 text-xs text-[var(--text-muted)]">Simulated card transactions. Overview seeded from the held-out test period.</p>
             </div>
             <div className="flex items-center gap-2 rounded-md border border-[var(--line-soft)] bg-white/95 px-2 py-1">
               <button
@@ -704,7 +705,7 @@ export default function Page() {
                     ) : null}
                   </div>
                   <p className="mono mt-1 text-xs text-[var(--text-muted)]">
-                    Final probability: {((explain?.final_probability ?? detail.pred_score) * 100).toFixed(1)}%
+                    Model output before calibration and account blend: {((explain?.final_probability ?? detail.pred_score) * 100).toFixed(1)}%
                   </p>
                 </div>
 
