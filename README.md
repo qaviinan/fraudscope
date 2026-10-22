@@ -1,165 +1,46 @@
-# FraudScope Backend (Synthetic IEEE-CIS Fraud Graph API)
+# FraudScope
 
-Backend for graph-centric fraud analysis and dynamic visualization payloads.
+Fraud-ring detection on simulated card transactions: graph features built only from past data, an XGBoost model, and a graph explorer for looking into flagged transactions.
 
-## What this backend does
+**Demo:** [fraudscope.vercel.app](https://fraudscope.vercel.app)
 
-- Generates a large synthetic IEEE-CIS-style dataset using real-column distribution profiles.
-- Assumes clean entity IDs (`uid_clean`) for initial implementation.
-- Trains `XGBoost` with asymmetric focal objective.
-- Builds UID aggregate features and graph-structural embeddings.
-- Produces API-ready artifacts for:
-  - force-directed graph nodes/links
-  - hop-based expansion
-  - star/ring pattern endpoints
-  - transaction explainability payloads (waterfall-ready contributions)
-  - embedding-space payloads
-  - entity timelines
+![FraudScope explorer](docs/screenshot.png)
 
-## Foundational flow review
+The simulator (`src/fraud_graphs/synthetic_v2.py`) creates customers and households that legitimately share cards and devices. It adds fraud rings that reuse stolen cards, devices and addresses, plus card testing, account takeover and first-party fraud. It records each transaction's true fraud probability, which gives a ceiling for any model.
 
-`docs/foundational_flow_review.md` walks the pipeline stage by stage (real data, synthetic
-generator, cleaning, embeddings, objective, UID blend, evaluation, graph queries, dashboard
-panels) with the math and economic reasoning behind each step and what each step actually
-produces. Every number in it is reproduced by:
+The graph features (`graph_features.py`) look only at earlier transactions:
+- how many other accounts used the same card, address or device in the last hour, day and week;
+- that entity's fraud rate, using only labels at least 14 days old, to allow for chargeback delay;
+- a two-hop count of addresses reachable through devices seen with the card.
 
-```bash
-python scripts/diagnose_foundations.py --n-transactions 120000 --out outputs/diagnostics.json
-```
+`tests/test_no_lookahead.py` checks that changing future rows doesn't change these features or the account score blend.
 
-## Generator v2 (actor-level, planted fraud economics)
+## Results
 
-`docs/generator_v2_verification.md` describes the v2 generator, the causal graph features and the
-verification results (ceiling PR-AUC 0.72; graph features lift a transaction-only model from 0.67 to 0.70).
-Build v2 artifacts with:
+PR-AUC on the last 15% of the timeline, mean ± sd over 5 simulator seeds ([per-seed results](results/ablation_pr_auc.csv)):
 
-```bash
-python scripts/build_backend_api_artifacts.py --generator v2 --objective logistic \
-  --causal-graph-features --calibrate --n-transactions 120000 --output-dir outputs/backend_api
-python scripts/verify_generator_v2.py --out docs/generator_v2_verification.json
-```
+| Features | PR-AUC |
+|---|---|
+| True probabilities (ceiling) | 0.61 ± 0.06 |
+| Transaction fields only | 0.53 ± 0.08 |
+| All features, including graph | 0.58 ± 0.06 |
+| Graph features only | 0.54 ± 0.07 |
 
-## Key modules
+Adding the graph features raises PR-AUC by 0.04 on average over transaction fields alone, within each seed (range +0.01 to +0.07), reaching about 94% of the ceiling. Per-account averages fitted on the training window make things worse (0.34), because they don't carry over to new time periods.
 
-- `src/fraud_graphs/synthetic.py`: v1 marginal-profile generator.
-- `src/fraud_graphs/synthetic_v2.py`: v2 actor-level generator (households, rings, ATO, first-party fraud).
-- `src/fraud_graphs/graph_features.py`: causal neighbour aggregates (leak-free graph features).
-- `src/fraud_graphs/features.py`: UID aggregations + UID label blending.
-- `src/fraud_graphs/graph_embeddings.py`: sparse graph embedding features.
-- `src/fraud_graphs/modeling.py`: XGBoost training + asymmetric focal objective + explanation helper.
-- `src/fraud_graphs/backend_builder.py`: builds full backend artifacts.
-- `src/fraud_graphs/graph_module.py`: graph store and neighborhood/pattern queries.
-- `src/fraud_graphs/api_server.py`: FastAPI app with all endpoints.
+All of this is on simulated data where the simulator plants the patterns the graph features look for. It shows the features work when rings behave this way, not how much they would add on a real portfolio.
 
-## Build backend artifacts (in `gpt2-pytorch`)
+## Running it
 
 ```bash
-conda run -n gpt2-pytorch python scripts/build_backend_api_artifacts.py \
-  --real-transaction-path data/train_transaction.csv \
-  --real-identity-path data/train_identity.csv \
-  --n-transactions 250000 \
-  --output-dir outputs/backend_api
+pip install -r requirements.txt
+pytest
+python scripts/build_backend_api_artifacts.py       # simulate, train, score (~1.5 min)
+python scripts/verify_generator_v2.py --quick       # the ablation above, one seed
+python scripts/export_frontend_snapshots.py --artifacts-dir outputs/backend_api/artifacts --out-dir frontend/public/snapshots
+cd frontend && npm ci && npm run dev
 ```
 
-Artifacts are written under `outputs/backend_api/artifacts`.
+The frontend reads the exported JSON snapshots. `python scripts/run_api.py --artifacts-dir outputs/backend_api/artifacts` serves the same data from a FastAPI backend; start the frontend with `NEXT_PUBLIC_DATA_SOURCE=api` to use it.
 
-## Run API
-
-```bash
-conda run -n gpt2-pytorch python scripts/run_api.py \
-  --artifacts-dir outputs/backend_api/artifacts \
-  --host 0.0.0.0 \
-  --port 8000
-```
-
-Alternative:
-```bash
-conda run -n gpt2-pytorch uvicorn fraud_graphs.asgi:app --host 0.0.0.0 --port 8000
-```
-
-## Core endpoints
-
-- `GET /health`
-- `GET /api/v1/meta`
-- `GET /api/v1/graph/overview`
-- `GET /api/v1/graph/neighborhood?node_id=tx:2000001&hops=2`
-- `GET /api/v1/graph/transaction/{transaction_id}`
-- `GET /api/v1/graph/patterns/stars`
-- `GET /api/v1/graph/patterns/rings`
-- `GET /api/v1/transactions/{transaction_id}`
-- `GET /api/v1/transactions/{transaction_id}/explain`
-- `GET /api/v1/embedding-space?sample_size=2500`
-- `GET /api/v1/timeline/entity?entity_type=DeviceInfo&entity_value=iOS`
-- `GET /api/v1/search?q=2000`
-
-Most endpoints accept:
-- `dataset=main` (default)
-- `dataset=demo` (small, idealized motif dataset for graph UX validation)
-
-## API smoke test
-
-```bash
-conda run -n gpt2-pytorch python scripts/smoke_test_api.py \
-  --artifacts-dir outputs/backend_api/artifacts
-```
-
-## Frontend (one-page explorer)
-
-The `frontend/` directory contains a single-page Next.js investigation dashboard:
-- force-directed graph explorer
-- transaction explainability panel
-- UID timeline view
-- embedding scatter snapshot
-- star/ring pattern lists
-
-### Run frontend
-
-```bash
-cd frontend
-cp .env.example .env.local
-npm install
-npm run dev
-```
-
-Open `http://localhost:3000`.
-
-### Static snapshot mode (Vercel-friendly)
-
-Generate precomputed JSON snapshots locally:
-
-```bash
-conda run -n gpt2-pytorch python scripts/export_frontend_snapshots.py \
-  --artifacts-dir outputs/backend_api/artifacts \
-  --out-dir frontend/public/snapshots
-```
-
-Then configure frontend env for static serving only:
-
-- `NEXT_PUBLIC_DATA_SOURCE=static`
-- `NEXT_PUBLIC_FRAUD_API_BASE_URL` is ignored in static mode
-
-In this mode, the frontend reads only files under `frontend/public/snapshots/` and does zero backend/model computation in cloud runtime.
-
-### Vercel deployment (no cloud compute)
-
-1. Commit `frontend/public/snapshots/*.json`.
-2. In Vercel, set project root to `frontend/`.
-3. Set env:
-   - `NEXT_PUBLIC_DATA_SOURCE=static`
-4. Deploy.
-
-Because the frontend is exported static (`output: "export"`), Vercel serves files only. No model training/feature engineering/inference runs in cloud runtime.
-
-### Frontend env
-
-- `NEXT_PUBLIC_FRAUD_API_BASE_URL` default: `http://127.0.0.1:8000`
-- `NEXT_PUBLIC_DATA_SOURCE`:
-  - `api` = live API calls
-  - `static` = precomputed snapshot files only (recommended for Vercel free tier)
-
-Backend CORS now allows local frontend origins by default:
-- `http://localhost:3000`
-- `http://127.0.0.1:3000`
-
-Override with:
-- `FRAUD_API_CORS_ORIGINS=http://localhost:3000,http://your-host`
+The account-ID idea comes from Chris Deotte's and Konstantin Yakovlev's IEEE-CIS Kaggle work, and the simulator's column layout follows that dataset.
