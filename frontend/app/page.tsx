@@ -3,7 +3,7 @@
 import clsx from "clsx";
 import dynamic from "next/dynamic";
 import { motion } from "framer-motion";
-import React, { ComponentType, FormEvent, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import React, { ComponentType, FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 type ForceGraphHandle = { zoomToFit?: (ms?: number, padding?: number) => void };
 import {
@@ -137,6 +137,7 @@ type ForceGraph2DProps = {
   graphData: GraphResponse;
   width: number;
   height: number;
+  warmupTicks?: number;
   cooldownTicks?: number;
   d3VelocityDecay?: number;
   d3AlphaDecay?: number;
@@ -151,6 +152,16 @@ type ForceGraph2DProps = {
   onEngineStop?: () => void;
   ref?: React.Ref<ForceGraphHandle>;
   nodeCanvasObject?: (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => void;
+};
+
+const subscribeNoop = () => () => {};
+
+type OverviewData = {
+  graph: GraphResponse;
+  relationColumns: string[];
+  stars: PatternItem[];
+  rings: PatternItem[];
+  points: EmbeddingPoint[];
 };
 
 const ForceGraph2D = dynamic(
@@ -231,7 +242,7 @@ function riskColor(score: number | undefined): string {
 }
 
 export default function Page() {
-  const [mounted, setMounted] = useState(false);
+  const mounted = useSyncExternalStore(subscribeNoop, () => true, () => false);
   const [graph, setGraph] = useState<GraphResponse>({ nodes: [], links: [] });
   const [loadingGraph, setLoadingGraph] = useState(true);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -250,6 +261,16 @@ export default function Page() {
   const [hoverNodeId, setHoverNodeId] = useState<string | null>(null);
   const snapshotRef = useRef<Partial<Record<DatasetName, SnapshotBundle>>>({});
   const graphRef = useRef<ForceGraphHandle | null>(null);
+  const graphBoxRef = useRef<HTMLDivElement | null>(null);
+  const [graphWidth, setGraphWidth] = useState(900);
+
+  useEffect(() => {
+    const el = graphBoxRef.current;
+    if (!el) return;
+    const ro = new ResizeObserver(([entry]) => setGraphWidth(Math.floor(entry.contentRect.width)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const ensureSnapshot = useCallback(
     async (ds: DatasetName): Promise<SnapshotBundle | null> => {
@@ -263,63 +284,73 @@ export default function Page() {
     [],
   );
 
-  const refreshOverview = useCallback(async () => {
-    try {
-      setLoadingGraph(true);
-      setError(null);
-      if (IS_STATIC) {
-        const snap = await ensureSnapshot(dataset);
-        if (!snap) throw new Error("Static snapshot not available.");
-        setGraph(snap.overview);
-        setRelationColumns(snap.meta?.relation_columns ?? Object.keys(DEFAULT_RELATION_COLORS));
-        setStars(snap.patterns.stars.patterns ?? []);
-        setRings(snap.patterns.rings.patterns ?? []);
-        setEmbeddingPoints(snap.embedding.points ?? []);
-        return;
-      }
-      const metaData = await fetchApi<{ relation_columns: string[] }>("/api/v1/meta", dataset);
-      setRelationColumns(metaData.relation_columns ?? Object.keys(DEFAULT_RELATION_COLORS));
-      const [overview, starData, ringData, embedData] = await Promise.all([
-        fetchApi<GraphResponse>("/api/v1/graph/overview?max_transactions=80&hops=2&max_nodes=900&max_edges=3800", dataset),
-        fetchApi<{ patterns: PatternItem[] }>("/api/v1/graph/patterns/stars?top_k=10&min_degree=6", dataset),
-        fetchApi<{ patterns: PatternItem[] }>("/api/v1/graph/patterns/rings?top_k=10&max_seed_transactions=1500", dataset),
-        fetchApi<{ points: EmbeddingPoint[] }>("/api/v1/embedding-space?sample_size=1200", dataset),
-      ]);
-      setGraph(overview);
-      setStars(starData.patterns);
-      setRings(ringData.patterns);
-      setEmbeddingPoints(embedData.points);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "Unknown error";
-      setError(msg);
-    } finally {
-      setLoadingGraph(false);
+  const loadOverview = useCallback(async (): Promise<OverviewData> => {
+    if (IS_STATIC) {
+      const snap = await ensureSnapshot(dataset);
+      if (!snap) throw new Error("Static snapshot not available.");
+      return {
+        graph: snap.overview,
+        relationColumns: snap.meta?.relation_columns ?? Object.keys(DEFAULT_RELATION_COLORS),
+        stars: snap.patterns.stars.patterns ?? [],
+        rings: snap.patterns.rings.patterns ?? [],
+        points: snap.embedding.points ?? [],
+      };
     }
+    const metaData = await fetchApi<{ relation_columns: string[] }>("/api/v1/meta", dataset);
+    const [overview, starData, ringData, embedData] = await Promise.all([
+      fetchApi<GraphResponse>("/api/v1/graph/overview?max_transactions=80&hops=2&max_nodes=900&max_edges=3800", dataset),
+      fetchApi<{ patterns: PatternItem[] }>("/api/v1/graph/patterns/stars?top_k=10&min_degree=6", dataset),
+      fetchApi<{ patterns: PatternItem[] }>("/api/v1/graph/patterns/rings?top_k=10&max_seed_transactions=1500", dataset),
+      fetchApi<{ points: EmbeddingPoint[] }>("/api/v1/embedding-space?sample_size=1200", dataset),
+    ]);
+    return {
+      graph: overview,
+      relationColumns: metaData.relation_columns ?? Object.keys(DEFAULT_RELATION_COLORS),
+      stars: starData.patterns,
+      rings: ringData.patterns,
+      points: embedData.points,
+    };
   }, [dataset, ensureSnapshot]);
 
-  useEffect(() => {
-    setMounted(true);
+  const refreshOverview = useCallback(
+    () =>
+      loadOverview()
+        .then((d) => {
+          setError(null);
+          setGraph(d.graph);
+          setRelationColumns(d.relationColumns);
+          setStars(d.stars);
+          setRings(d.rings);
+          setEmbeddingPoints(d.points);
+        })
+        .catch((err) => setError(err instanceof Error ? err.message : "Unknown error"))
+        .finally(() => setLoadingGraph(false)),
+    [loadOverview],
+  );
+
+  const selectTx = useCallback((id: number | null) => {
+    setSelectedTxId(id);
+    if (id === null) {
+      setDetail(null);
+      setExplain(null);
+      setTimeline(null);
+    }
   }, []);
 
-  useEffect(() => {
+  const switchDataset = (ds: DatasetName) => {
+    if (ds === dataset) return;
     setSelectedNodeId(null);
-    setSelectedTxId(null);
-    setDetail(null);
-    setExplain(null);
-    setTimeline(null);
-  }, [dataset]);
+    selectTx(null);
+    setLoadingGraph(true);
+    setDataset(ds);
+  };
 
   useEffect(() => {
     void refreshOverview();
   }, [refreshOverview]);
 
   useEffect(() => {
-    if (!selectedTxId) {
-      setDetail(null);
-      setExplain(null);
-      setTimeline(null);
-      return;
-    }
+    if (!selectedTxId) return;
     const loadTransactionPanels = async () => {
       try {
         if (IS_STATIC) {
@@ -358,9 +389,9 @@ export default function Page() {
     async (node: GraphNode) => {
       setSelectedNodeId(node.id);
       if (node.id.startsWith("tx:")) {
-        setSelectedTxId(Number.parseInt(node.id.replace("tx:", ""), 10));
+        selectTx(Number.parseInt(node.id.replace("tx:", ""), 10));
       } else {
-        setSelectedTxId(null);
+        selectTx(null);
       }
       try {
         if (IS_STATIC) {
@@ -384,7 +415,7 @@ export default function Page() {
         setError(msg);
       }
     },
-    [dataset, expandMode, ensureSnapshot],
+    [dataset, expandMode, ensureSnapshot, selectTx],
   );
 
   const handleSearch = useCallback(
@@ -431,7 +462,7 @@ export default function Page() {
           }
           setGraph(resultGraph);
           setSelectedNodeId(entity.node_id);
-          setSelectedTxId(null);
+          selectTx(null);
           return;
         }
 
@@ -459,7 +490,7 @@ export default function Page() {
           );
           setGraph(resultGraph);
           setSelectedNodeId(nodeId);
-          setSelectedTxId(null);
+          selectTx(null);
         } else {
           setError("No matching transactions or entities found.");
         }
@@ -468,7 +499,7 @@ export default function Page() {
         setError(msg);
       }
     },
-    [dataset, searchInput, ensureSnapshot],
+    [dataset, searchInput, ensureSnapshot, selectTx],
   );
 
   const graphStats = useMemo(
@@ -498,7 +529,7 @@ export default function Page() {
             <div className="flex items-center gap-2 rounded-md border border-[var(--line-soft)] bg-white/95 px-2 py-1">
               <button
                 type="button"
-                onClick={() => setDataset("demo")}
+                onClick={() => switchDataset("demo")}
                 className={clsx(
                   "rounded px-2 py-1 text-xs font-semibold",
                   dataset === "demo" ? "bg-[var(--bg-deep)] text-white" : "text-[var(--text-muted)]",
@@ -508,7 +539,7 @@ export default function Page() {
               </button>
               <button
                 type="button"
-                onClick={() => setDataset("main")}
+                onClick={() => switchDataset("main")}
                 className={clsx(
                   "rounded px-2 py-1 text-xs font-semibold",
                   dataset === "main" ? "bg-[var(--bg-deep)] text-white" : "text-[var(--text-muted)]",
@@ -532,7 +563,10 @@ export default function Page() {
               </button>
               <button
                 type="button"
-                onClick={() => void refreshOverview()}
+                onClick={() => {
+                  setLoadingGraph(true);
+                  void refreshOverview();
+                }}
                 className="rounded-xl border border-[var(--line-soft)] bg-white px-4 py-2.5 text-sm font-semibold text-[var(--text-strong)] transition hover:bg-slate-50"
               >
                 Reset
@@ -587,6 +621,7 @@ export default function Page() {
                 </span>
               </div>
             </div>
+            <div ref={graphBoxRef} className="w-full">
             {loadingGraph ? (
               <div className="flex h-[560px] items-center justify-center text-sm text-[var(--text-muted)]">
                 Building investigation graph...
@@ -594,11 +629,12 @@ export default function Page() {
             ) : (
               <ForceGraph2D
                 ref={graphRef}
-                onEngineStop={() => graphRef.current?.zoomToFit?.(400, 40)}
+                onEngineStop={() => graphRef.current?.zoomToFit?.(0, 40)}
                 graphData={graph}
-                width={980}
+                width={graphWidth}
                 height={560}
-                cooldownTicks={60}
+                warmupTicks={150}
+                cooldownTicks={0}
                 d3VelocityDecay={0.35}
                 d3AlphaDecay={0.06}
                 linkColor={(link: GraphLink) =>
@@ -650,6 +686,7 @@ export default function Page() {
                 }}
               />
             )}
+            </div>
           </article>
 
           <motion.aside
