@@ -44,3 +44,21 @@ def test_uid_blend_ignores_future_rows():
     q = p.copy()
     q[~early] = 1.0
     np.testing.assert_allclose(uid_label_propagation_blend(df, p)[early], uid_label_propagation_blend(df, q)[early])
+
+
+def test_custom_two_hop_path_ignores_future_rows():
+    df = _frame()
+    cut = df["TransactionDT"].median()
+    early = (df["TransactionDT"] <= cut).to_numpy()
+    path = [("uid_clean", "DeviceInfo", "addr1", "addr_via_account_devices")]
+    a = build_causal_graph_features(df, entity_columns=["DeviceInfo"], two_hop=path, label_known_mask=early)
+    b = build_causal_graph_features(_perturb_future(df, cut), entity_columns=["DeviceInfo"], two_hop=path, label_known_mask=early)
+    pd.testing.assert_frame_equal(a[early], b[early])
+
+
+def test_degree_cap_drops_hub_links():
+    df = _frame()
+    uncapped = build_causal_graph_features(df, max_via_degree=None)
+    capped = build_causal_graph_features(df, max_via_degree=1)
+    col = "g_2hop_addresses_via_card_devices"
+    assert capped[col].sum() < uncapped[col].sum()

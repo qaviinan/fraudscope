@@ -19,6 +19,11 @@ import pandas as pd
 
 DEFAULT_ENTITY_COLUMNS: Tuple[str, ...] = ("card1", "addr1", "DeviceInfo")
 DEFAULT_WINDOWS_HOURS: Tuple[float, ...] = (1.0, 24.0, 168.0)
+# (anchor, via, target, name): distinct targets reachable through vias already seen with the anchor
+DEFAULT_TWO_HOP: Tuple[Tuple[str, str, str, str], ...] = (
+    ("card1", "DeviceInfo", "addr1", "addresses_via_card_devices"),
+    ("DeviceInfo", "addr1", "card1", "cards_via_device_addresses"),
+)
 
 
 def _entity_window_features(
@@ -61,6 +66,36 @@ def _entity_window_features(
     return out
 
 
+def _missing(v: object) -> bool:
+    return v is None or (isinstance(v, float) and np.isnan(v))
+
+
+def _two_hop_counts(anchors: np.ndarray, vias: np.ndarray, targets: np.ndarray, max_via_degree: int | None) -> np.ndarray:
+    """Rows must be in time order. Each row sees only links created by earlier rows."""
+    anchor_vias: Dict[str, Set[str]] = defaultdict(set)
+    via_targets: Dict[str, Set[str]] = defaultdict(set)
+    out = np.zeros(len(anchors), dtype=np.float32)
+    cap = np.inf if max_via_degree is None else max_via_degree
+    for i in range(len(anchors)):
+        a, v, t = anchors[i], vias[i], targets[i]
+        v = None if _missing(v) else str(v)
+        t = None if _missing(t) else str(t)
+        if not _missing(a):
+            a = str(a)
+            reach: Set[str] = set()
+            for vv in anchor_vias.get(a, ()):
+                linked = via_targets.get(vv, ())
+                if len(linked) <= cap:
+                    reach |= linked
+            reach.discard(t)
+            out[i] = len(reach)
+            if v is not None:
+                anchor_vias[a].add(v)
+        if v is not None and t is not None:
+            via_targets[v].add(t)
+    return out
+
+
 def build_causal_graph_features(
     df: pd.DataFrame,
     entity_columns: Iterable[str] = DEFAULT_ENTITY_COLUMNS,
@@ -71,6 +106,8 @@ def build_causal_graph_features(
     windows_hours: Sequence[float] = DEFAULT_WINDOWS_HOURS,
     prior_weight: float = 5.0,
     label_lag_days: float = 14.0,
+    two_hop: Sequence[Tuple[str, str, str, str]] | None = None,
+    max_via_degree: int | None = None,
 ) -> pd.DataFrame:
     """
     Return features aligned to df.index: one `g_<column>_*` block per entity column, plus two-hop
@@ -79,6 +116,9 @@ def build_causal_graph_features(
     label_known_mask marks rows whose labels may be used as history (usually the train split).
     Other labels are never read. A label becomes usable only label_lag_days after its transaction,
     because chargebacks arrive late.
+
+    With max_via_degree set, two-hop paths skip via-nodes linked to more targets than that, so
+    shared infrastructure (a carrier IP, a popular device model) doesn't connect everyone.
     """
     if label_known_mask is None:
         label_known_mask = np.ones(len(df), dtype=bool)
@@ -114,38 +154,17 @@ def build_causal_graph_features(
         for name, arr in block.items():
             feats[f"g_{col}_{name}"] = arr
 
-    # Two-hop counts from earlier rows only: addresses reachable via devices already seen with
-    # this card, and cards reachable via addresses already seen with this device.
-    if {"card1", "addr1", "DeviceInfo"}.issubset(set(entity_columns)):
-        card_devices: Dict[str, Set[str]] = defaultdict(set)
-        device_addrs: Dict[str, Set[str]] = defaultdict(set)
-        device_cards: Dict[str, Set[str]] = defaultdict(set)
-        addr_cards: Dict[str, Set[str]] = defaultdict(set)
-        cards = df["card1"].to_numpy(dtype=object)[order]
-        addrs = df["addr1"].to_numpy(dtype=object)[order]
-        devs = df["DeviceInfo"].to_numpy(dtype=object)[order]
-        two_hop_addr = np.zeros(n, dtype=np.float32)
-        two_hop_card = np.zeros(n, dtype=np.float32)
-        for i in range(n):
-            c, a, d = str(cards[i]), str(addrs[i]), devs[i]
-            d = None if (d is None or (isinstance(d, float) and np.isnan(d))) else str(d)
-            reach_a: Set[str] = set()
-            for dd in card_devices.get(c, ()):
-                reach_a |= device_addrs.get(dd, set())
-            reach_a.discard(a)
-            two_hop_addr[i] = len(reach_a)
-            if d is not None:
-                reach_c: Set[str] = set()
-                for aa in device_addrs.get(d, ()):
-                    reach_c |= addr_cards.get(aa, set())
-                reach_c.discard(c)
-                two_hop_card[i] = len(reach_c)
-                card_devices[c].add(d)
-                device_addrs[d].add(a)
-                device_cards[d].add(c)
-            addr_cards[a].add(c)
-        feats["g_2hop_addresses_via_card_devices"] = two_hop_addr
-        feats["g_2hop_cards_via_device_addresses"] = two_hop_card
+    entity_set = set(entity_columns)
+    paths = DEFAULT_TWO_HOP if two_hop is None else two_hop
+    for anchor, via, target, name in paths:
+        if two_hop is None and not {anchor, via, target} <= entity_set:
+            continue
+        feats[f"g_2hop_{name}"] = _two_hop_counts(
+            df[anchor].to_numpy(dtype=object)[order],
+            df[via].to_numpy(dtype=object)[order],
+            df[target].to_numpy(dtype=object)[order],
+            max_via_degree,
+        )
 
     out = pd.DataFrame(feats)
     inv = np.empty_like(order)
