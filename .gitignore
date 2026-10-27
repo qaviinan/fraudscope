@@ -14,7 +14,7 @@ __pycache__/
 venv/
 
 # Large local datasets/artifacts
-data/
+/data/
 outputs/
 outputs_smoke/
 outputs_api_smoke/
